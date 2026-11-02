@@ -123,7 +123,11 @@ function channelLivePath(link) {
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'" };
 const decodeHtml = (s) =>
   s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) =>
-    e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENTITIES[e.toLowerCase()] ?? m
+    {
+      if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? m;
+      const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+    }
   );
 
 /** Pull a JSON object assigned in a page script (e.g. `var ytInitialPlayerResponse = {...};`) with a brace-balanced scan. */

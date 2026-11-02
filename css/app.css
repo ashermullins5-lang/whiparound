@@ -378,6 +378,7 @@ a { color: var(--amber); }
   line-height: 1;
 }
 .bug-team b { font-weight: 600; letter-spacing: .03em; }
+.bug-team .bug-logo { width: 22px; height: 22px; margin-right: 1px; }
 .bug-team .pts { min-width: 1.2em; text-align: right; font-size: 19px; }
 .bug-team .pos { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 .bug-status {
@@ -394,8 +395,10 @@ a { color: var(--amber); }
 }
 .bug-status .sit { color: var(--amber); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 .bug-status .sit.rz { color: #ff7a7a; }
+@container (max-width: 240px) {
+  .bug-team .bug-logo { display: none; }
+}
 @container (max-width: 200px) {
-  .bug-team .bug-logo { width: 13px; height: 13px; }
   .bug { left: 4px; bottom: 4px; max-width: calc(100% - 8px); }
   .bug-team { font-size: 11px !important; padding: 2px 4px 2px 3px !important; gap: 3px !important; }
   .bug-team .pts { font-size: 12px !important; min-width: 0; }
@@ -704,7 +707,7 @@ a { color: var(--amber); }
 .g-mark { display: grid; place-items: center; height: 26px; }
 .g-mark .tlogo { width: 28px; height: 28px; }
 .g-mark .tchip { width: 100%; }
-.bug-team .bug-logo { width: 22px; height: 22px; margin-right: 1px; }
+
 .tk .tk-logo { width: 18px; height: 18px; }
 .gamecard .side .card-logo { width: 40px; height: 40px; }
 .flash-logo { height: .9em; width: auto; align-self: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }

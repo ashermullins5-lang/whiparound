@@ -23,13 +23,17 @@ function probe(src) {
     const img = new Image();
     img.referrerPolicy = 'no-referrer';
     img.decoding = 'async';
-    const done = (ok) => {
+    let settled = false;
+    const timer = setTimeout(() => done(false), 8000);
+    function done(ok) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       img.onload = img.onerror = null;
       resolve(ok);
-    };
+    }
     img.onload = () => done(img.naturalWidth > 0);
     img.onerror = () => done(false);
-    setTimeout(() => done(false), 8000);
     img.src = src;
   });
 }
@@ -44,7 +48,8 @@ export function logoFor(team) {
   const base = team?.logo;
   if (!base || !/^https:\/\//i.test(base)) return null;
   const hit = cache.get(base);
-  if (hit) return hit.status === 'ok' ? hit : null;
+  // A failed logo (often a slow network) gets another try after 5 minutes.
+  if (hit && !(hit.status === 'none' && Date.now() - hit.at > 300000)) return hit.status === 'ok' ? hit : null;
   cache.set(base, { status: 'pending' });
   (async () => {
     for (const url of [darkVariant(base), base].filter(Boolean)) {
@@ -53,7 +58,7 @@ export function logoFor(team) {
         return announce();
       }
     }
-    cache.set(base, { status: 'none' });
+    cache.set(base, { status: 'none', at: Date.now() });
   })();
   return null;
 }

@@ -70,7 +70,7 @@ export function youtubeChannel(url) {
   let ref;
   let rest;
   const first = parts[0];
-  if (/^@[\w.\-·]{2,}$/u.test(first)) {
+  if (/^@[\p{L}\p{N}\p{M}_.\-·]{2,}$/u.test(first)) {
     ref = { handle: first, path: `/${first}` };
     rest = parts.slice(1);
   } else if (first === 'channel' && /^UC[\w-]{22}$/.test(parts[1] || '')) {

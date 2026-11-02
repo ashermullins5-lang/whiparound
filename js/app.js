@@ -5,7 +5,7 @@ import { $, $$, esc, h, icon, formatKickoff, secondsAgo, contrastOn, debounce } 
 import { LEAGUES, DEFAULT_LEAGUES, league as leagueById, leagueShort, watchLinks } from './leagues.js';
 import { Scoreboard, statusText, situationText } from './scores.js';
 import { heatLevel } from './excitement.js';
-import { makeSource, matchSources, searchLibrary, parseM3U, normName, KIND_LABEL, TEST_STREAMS, isLikelyUrl, youtubeChannel } from './sources.js';
+import { makeSource, matchSources, searchLibrary, parseM3U, normName, KIND_LABEL, TEST_STREAMS, isLikelyUrl, youtubeChannel, detectKind } from './sources.js';
 import { createStorage } from './storage.js';
 import { Player } from './player.js';
 import { createDemo } from './demo.js';
@@ -1196,6 +1196,7 @@ function openPicker({ tileId = null, gameKey = null } = {}) {
         return;
       }
       const existing = library.find((s) => s.url === url);
+      if (existing && existing.kind !== 'demo') existing.kind = detectKind(url);
       const s = existing || makeSource({ name: $('#pickName', paste).value, url, group: 'Added links' });
       if (!existing) {
         setLibrary([...library, s]);
@@ -1724,8 +1725,10 @@ async function boot() {
     grid.append(v.el);
   }
   applyLayoutAttr();
-  setLibrary(DEMO ? demo.setup().library : await storage.loadLibrary());
+  // Saved links get their type re-checked, so links saved before a new link type existed still play.
+  setLibrary(DEMO ? demo.setup().library : (await storage.loadLibrary()).map((s) => (s.kind === 'demo' ? s : { ...s, kind: detectKind(s.url) })));
   await detectProxy();
+  openDeepLink();
   refresh();
   board.start();
   renderTicker();
@@ -1740,6 +1743,36 @@ async function boot() {
 }
 
 boot();
+
+/**
+ * A shared link like ?watch=<stream or channel link>&name=High Point vs Liberty opens the app
+ * with that stream in the main tile, ready to watch.
+ */
+function openDeepLink() {
+  if (DEMO) return;
+  const watch = params.get('watch');
+  if (!watch || !isLikelyUrl(watch)) return;
+  let s = library.find((x) => x.url === watch.trim());
+  if (!s) {
+    s = makeSource({ name: params.get('name') || '', url: watch, group: 'Added links' });
+    setLibrary([...library, s]);
+    persistLib();
+  }
+  S.seenIntro = true;
+  if (!layoutById(S.layout).main) S.layout = '1+3';
+  applyLayoutAttr();
+  const main = S.order[0];
+  const t = tileById(main);
+  t.sourceId = s.id;
+  t.gameKey = null;
+  t.noGame = false;
+  t.filledAt = Date.now();
+  t.liveVideoId = null;
+  S.audio = main;
+  try {
+    history.replaceState(null, '', location.pathname);
+  } catch {}
+}
 
 // Exposed for debugging in the console.
 window.whiparound = { S, board, get library() { return library; }, views };
