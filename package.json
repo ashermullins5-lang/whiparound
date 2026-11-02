@@ -1,0 +1,12 @@
+{
+  "name": "whiparound",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multiview for live sports with live scores and automatic switching to the hottest game.",
+  "scripts": {
+    "start": "node server.js",
+    "lan": "node server.js --lan",
+    "test": "node --test tests/core.test.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
