@@ -1,0 +1,170 @@
+{
+  "note": "Official, free, legal sources only: rights holders' own free streams and licensed free services. YouTube entries are checked for live games every 15 minutes; web entries are shown as one-tap links. Reviewed 2026-11-02.",
+  "sources": [
+    {
+      "id": "field-of-68",
+      "name": "The Field of 68",
+      "kind": "youtube",
+      "youtubeChannelId": "UC9by2xjmM_ldmvIwYrARCDg",
+      "url": "https://www.youtube.com/@TheFieldOf68",
+      "sports": ["basketball"],
+      "whatStreamsFree": "College basketball, including the 24-hour Opening Day Marathon"
+    },
+    {
+      "id": "whl",
+      "name": "WHL",
+      "kind": "youtube",
+      "youtubeChannelId": "UCk6xCoaVuR0OGalXE2SpGrg",
+      "url": "https://www.youtube.com/@WHL",
+      "sports": ["hockey"],
+      "whatStreamsFree": "Western Hockey League games, most nights"
+    },
+    {
+      "id": "pwhl",
+      "name": "PWHL",
+      "kind": "youtube",
+      "youtubeChannelId": "UCNKUkQV2R0JKakyE1vuC1lQ",
+      "url": "https://www.youtube.com/@thepwhlofficial",
+      "sports": ["hockey"],
+      "whatStreamsFree": "Every PWHL game outside Canada (season starts Dec 5)"
+    },
+    {
+      "id": "flohockey",
+      "name": "FloHockey",
+      "kind": "youtube",
+      "youtubeChannelId": "UCoDZ1gwkbsZ9KGD2VdzG6DA",
+      "url": "https://www.youtube.com/channel/UCoDZ1gwkbsZ9KGD2VdzG6DA",
+      "sports": ["hockey"],
+      "whatStreamsFree": "Free Games of the Week from the AHL, ECHL, OHL, QMJHL and USHL"
+    },
+    {
+      "id": "pac12",
+      "name": "Pac-12",
+      "kind": "youtube",
+      "youtubeChannelId": "UCtxdtF8iCxZw593FSUIPrxg",
+      "url": "https://www.youtube.com/pac12",
+      "sports": ["soccer", "volleyball"],
+      "whatStreamsFree": "Pac-12 home volleyball and soccer"
+    },
+    {
+      "id": "wtt",
+      "name": "World Table Tennis",
+      "kind": "youtube",
+      "youtubeChannelId": "UC9ckyA_A3MfXUa0ttxMoIZw",
+      "url": "https://www.youtube.com/@WTTGlobal",
+      "sports": ["table tennis"],
+      "whatStreamsFree": "Live WTT event sessions"
+    },
+    {
+      "id": "bwf",
+      "name": "BWF TV",
+      "kind": "youtube",
+      "youtubeChannelId": "UChh-akEbUM8_6ghGVnJd6cQ",
+      "url": "https://www.youtube.com/c/bwftv",
+      "sports": ["badminton"],
+      "whatStreamsFree": "Live badminton from the BWF World Tour"
+    },
+    {
+      "id": "nzc",
+      "name": "New Zealand Cricket",
+      "kind": "youtube",
+      "youtubeChannelId": "UCuKowzPg2-A0FcmyPa3yWug",
+      "url": "https://www.youtube.com/@nzctv",
+      "sports": ["cricket"],
+      "whatStreamsFree": "Every Ford Trophy one-day match"
+    },
+    {
+      "id": "jleague",
+      "name": "J.LEAGUE International",
+      "kind": "youtube",
+      "youtubeChannelId": "UCmQp6ZaAejJKKkXc_Y_lh1A",
+      "url": "https://www.youtube.com/c/JLEAGUEInternational",
+      "sports": ["soccer"],
+      "whatStreamsFree": "Up to 4 live J1 League matches a week, in English"
+    },
+    {
+      "id": "gtworld",
+      "name": "GT World",
+      "kind": "youtube",
+      "youtubeChannelId": "UC-yHapH6mW1ceZ_5PDUf1_g",
+      "url": "https://www.youtube.com/@GTWorld",
+      "sports": ["motorsport"],
+      "whatStreamsFree": "Most SRO GT races, live"
+    },
+    {
+      "id": "cricket-australia",
+      "name": "Cricket Australia",
+      "kind": "web",
+      "url": "https://www.cricket.com.au/watch/",
+      "sports": ["cricket"],
+      "whatStreamsFree": "Sheffield Shield and other domestic cricket, live",
+      "needsAccount": true
+    },
+    {
+      "id": "icc-tv",
+      "name": "ICC.tv",
+      "kind": "web",
+      "url": "https://www.icc-cricket.com/tournaments/icc-cricket-world-cup-league-2/videos",
+      "sports": ["cricket"],
+      "whatStreamsFree": "Selected international cricket, live",
+      "needsAccount": true
+    },
+    {
+      "id": "mls-next-pro",
+      "name": "MLS NEXT Pro",
+      "kind": "web",
+      "url": "https://www.mlsnextpro.com",
+      "sports": ["soccer"],
+      "whatStreamsFree": "Every MLS NEXT Pro match"
+    },
+    {
+      "id": "ncaa-com",
+      "name": "NCAA.com",
+      "kind": "web",
+      "url": "https://www.ncaa.com/",
+      "sports": ["multi"],
+      "whatStreamsFree": "Division II and III championship games"
+    },
+    {
+      "id": "swac-tv",
+      "name": "SWAC TV",
+      "kind": "web",
+      "url": "https://swac.org",
+      "sports": ["multi"],
+      "whatStreamsFree": "Selected SWAC games"
+    },
+    {
+      "id": "hbcu-go",
+      "name": "HBCU GO",
+      "kind": "web",
+      "url": "https://hbcugo.tv",
+      "sports": ["multi"],
+      "whatStreamsFree": "HBCU football and basketball"
+    },
+    {
+      "id": "meac",
+      "name": "MEAC Network",
+      "kind": "web",
+      "url": "https://meacsports.com",
+      "sports": ["multi"],
+      "whatStreamsFree": "Selected MEAC games"
+    },
+    {
+      "id": "rugbypass",
+      "name": "RugbyPass TV",
+      "kind": "web",
+      "url": "https://rugbypass.tv",
+      "sports": ["rugby"],
+      "whatStreamsFree": "Nations Championship rugby in the US",
+      "needsAccount": true
+    },
+    {
+      "id": "pluto-sports",
+      "name": "Pluto TV live sports",
+      "kind": "web",
+      "url": "https://pluto.tv/us/watch/live-tv/category/live-sports-ptv1/",
+      "sports": ["multi"],
+      "whatStreamsFree": "Free sports channels, including CBS's Golazo Network and Tennis Channel 2"
+    }
+  ]
+}

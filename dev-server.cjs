@@ -263,6 +263,74 @@ async function fetchYouTube(path) {
 
 const ytCache = new Map(); // path -> { at, status, body }
 
+// ---------- Free, legal games: which official free channels are live right now ----------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Check each YouTube channel in the free-sources catalog and list the ones that are live or about
+ * to start. Used by /api/free-now here and by scripts/free-now.mjs in the scheduled job.
+ */
+async function checkFreeNow(sources, { gapMs = 1500, log = () => {} } = {}) {
+  const live = [];
+  const errors = [];
+  const channels = sources.filter((s) => s.kind === 'youtube' && /^UC[\w-]{22}$/.test(s.youtubeChannelId || ''));
+  for (const [i, src] of channels.entries()) {
+    if (i) await sleep(gapMs); // polite: one request at a time
+    try {
+      const r = await fetchYouTube(`/channel/${src.youtubeChannelId}/live`);
+      if (r.consent) throw new Error('consent page');
+      if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
+      const info = parseYouTubeLive(r.html || '');
+      if (info.consent) throw new Error('consent page');
+      log(`${src.name}: ${info.videoId ? (info.live ? 'LIVE' : info.upcoming ? 'upcoming' : 'not live') : 'not live'}${info.blocked ? ' (bot check)' : ''}`);
+      if (info.videoId && (info.live || info.upcoming)) {
+        live.push({
+          sourceId: src.id,
+          source: src.name,
+          sports: src.sports || [],
+          videoId: info.videoId,
+          title: info.title || src.name,
+          status: info.live ? 'live' : 'upcoming',
+        });
+      }
+    } catch (e) {
+      errors.push({ sourceId: src.id, error: String(e.message || e) });
+      log(`${src.name}: error ${e.message || e}`);
+    }
+  }
+  return { updatedAt: new Date().toISOString(), live, errors, checked: channels.length };
+}
+
+// The helper checks in the background (at start, then every 10 minutes) and answers instantly
+// with the latest result, so opening the app never waits on a full round of checks.
+let freeNowLatest = null;
+let freeNowRun = null;
+function refreshFreeNow() {
+  if (freeNowRun) return freeNowRun;
+  let sources = [];
+  try {
+    sources = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'free-sources.json'), 'utf8')).sources || [];
+  } catch {
+    return Promise.resolve(null);
+  }
+  freeNowRun = checkFreeNow(sources, { gapMs: 600 })
+    .then((body) => (freeNowLatest = body))
+    .catch(() => freeNowLatest)
+    .finally(() => (freeNowRun = null));
+  return freeNowRun;
+}
+async function freeNow(req, res) {
+  const out = (code, obj) =>
+    send(res, code, JSON.stringify(obj), { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*' });
+  const stale = !freeNowLatest || Date.now() - new Date(freeNowLatest.updatedAt).getTime() > 10 * 60e3;
+  if (stale) refreshFreeNow();
+  // First run after start: wait for it (the app allows for that); later, answer at once.
+  const body = freeNowLatest || (await refreshFreeNow());
+  if (!body) return out(404, { error: 'No free-sources catalog' });
+  return out(200, body);
+}
+
 async function youtubeLive(req, res, params) {
   const json = (code, obj) => send(res, code, JSON.stringify(obj), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   const path = channelLivePath(params.get('url') || '');
@@ -403,6 +471,9 @@ const server = http.createServer((req, res) => {
   if (u.pathname.endsWith('/api/health')) {
     return send(res, 200, JSON.stringify({ ok: true, proxy: true }), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   }
+  if (u.pathname.endsWith('/api/free-now')) return void freeNow(req, res).catch((e) => {
+    if (!res.headersSent) send(res, 500, String(e?.message || e));
+  });
   if (u.pathname.endsWith('/api/youtube-live')) return void youtubeLive(req, res, u.searchParams).catch((e) => {
     if (!res.headersSent) send(res, 500, String(e?.message || e));
   });
@@ -413,8 +484,9 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, u.pathname);
 });
 
-module.exports = { parseYouTubeLive, channelLivePath, rewritePlaylist, server };
+module.exports = { parseYouTubeLive, channelLivePath, rewritePlaylist, fetchYouTube, checkFreeNow, server };
 
+if (require.main === module) setTimeout(refreshFreeNow, 500);
 if (require.main === module) server.listen(PORT, HOST, () => {
   console.log(`\n  Whiparound is running\n`);
   console.log(`  On this computer:  http://localhost:${PORT}`);

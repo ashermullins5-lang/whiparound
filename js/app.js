@@ -12,6 +12,7 @@ import { createDemo } from './demo.js';
 import { logoFor, onLogosReady, setLogosEnabled } from './logos.js';
 import { entitlements, layoutAllowed, UPGRADE_REASONS, PLAN_ROWS } from './plan.js';
 import { loadConfig, createAccount } from './account.js';
+import { loadCatalog, loadFreeNow, watchUrl } from './free.js';
 
 // ---------------------------------------------------------------------------
 // Setup & state
@@ -59,6 +60,7 @@ function defaults() {
     gameStreams: {},
     networkStreams: {},
     seenIntro: false,
+    freeAuto: true,
   };
 }
 
@@ -973,14 +975,19 @@ function renderGames() {
     list.length ? `<h3>${ico}${esc(title)}</h3>${list.map((g) => gameRow(g, slotOf.get(g.key))).join('')}` : '';
   let html =
     section('Hot right now', hot, icon('flame')) + section('Live', live) + section('Coming up', pre) + section('Final', post);
-  if (!html) {
+  const freeHtml = S.filter === 'all' ? freeSectionHtml() : '';
+  if (!html && freeHtml) html = '<p class="empty">No scoreboard games right now in the leagues you follow.</p>';
+  else if (!html) {
     html = board.updatedAt
       ? `<p class="empty">No games today in the leagues you follow. Add more in Settings.</p>`
       : board.errors.size
       ? `<p class="empty">Can't reach the scoreboard right now. Retrying…</p>`
       : `<p class="empty">Loading today's games…</p>`;
   }
-  gamesEl.innerHTML = html;
+  // Keep the "More free places" list open across refreshes if the viewer opened it.
+  const moreOpen = !!$('.free-more[open]', gamesEl);
+  gamesEl.innerHTML = freeHtml + html;
+  if (moreOpen) $('.free-more', gamesEl)?.setAttribute('open', '');
 }
 
 $('#filters').addEventListener('click', (e) => {
@@ -991,6 +998,8 @@ $('#filters').addEventListener('click', (e) => {
   persist();
 });
 gamesEl.addEventListener('click', (e) => {
+  const watch = e.target.closest('[data-free-watch]');
+  if (watch) return watchFree(watch.dataset.freeWatch);
   const row = e.target.closest('.game');
   if (!row) return;
   if (overlayPanel.matches) {
@@ -1695,6 +1704,16 @@ function openSettings() {
       persist();
     });
 
+    const freeSec = h(`<div class="sec"><h3>Free games</h3>
+      <label class="switch-row"><div><b>Start with free games</b><span>When you open Whiparound, put official free live streams in your empty tiles.</span></div><input type="checkbox" id="freeAuto" ${S.freeAuto ? 'checked' : ''}></label>
+    </div>`);
+    $('#freeAuto', freeSec).addEventListener('change', (e) => {
+      S.freeAuto = e.target.checked;
+      persist();
+      if (S.freeAuto) syncFreeTiles(false);
+    });
+    body.append(freeSec);
+
     const disp = h(`<div class="sec"><h3>Display</h3>
       <label class="switch-row"><div><b>Score ticker</b><span>Scores cycle along the bottom of the screen, a league at a time.</span></div><input type="checkbox" id="tickerOn" ${S.ticker ? 'checked' : ''}></label>
     </div>`);
@@ -1789,8 +1808,14 @@ function openHelp() {
 // Welcome
 // ---------------------------------------------------------------------------
 
+const bootAt = Date.now();
 function renderWelcome() {
   const el = $('#welcome');
+  // Give the free-games check a moment first, so the welcome card doesn't flash over games about to load.
+  if (!DEMO && !EMBED && !freeNow.loaded && Date.now() - bootAt < 2500) {
+    setTimeout(renderWelcome, 2600 - (Date.now() - bootAt));
+    return;
+  }
   const show = !DEMO && !S.seenIntro && !library.length && !S.tiles.some((t) => t.sourceId);
   if (!show) {
     el.hidden = true;
@@ -1920,6 +1945,11 @@ async function boot() {
   board.start();
   renderTicker();
   setInterval(renderFeedStatus, 5000);
+  if (!DEMO && !EMBED) {
+    refreshFree({ initial: true });
+    setInterval(refreshFree, 5 * 60e3);
+    document.addEventListener('visibilitychange', () => !document.hidden && refreshFree());
+  }
   if (DEMO) {
     toast({
       title: EMBED ? 'Preview with simulated games' : 'Demo mode',
@@ -1959,6 +1989,164 @@ function openDeepLink() {
   try {
     history.replaceState(null, '', location.pathname);
   } catch {}
+}
+
+
+// ---------------------------------------------------------------------------
+// Free, legal games: official free streams that are live right now
+// ---------------------------------------------------------------------------
+
+let freeNow = { live: [], updatedAt: null, stale: false, loaded: false };
+let freeCatalog = [];
+
+async function refreshFree({ initial = false } = {}) {
+  const [now, catalog] = await Promise.all([loadFreeNow(), freeCatalog.length ? freeCatalog : loadCatalog()]);
+  freeCatalog = catalog;
+  freeNow = { ...now, loaded: true };
+  syncFreeTiles(initial);
+  renderGames();
+}
+
+/** A library entry for a free live video (created on first use, tagged so it can be tidied later). */
+function freeSourceFor(item) {
+  const url = watchUrl(item.videoId);
+  let s = library.find((x) => x.url === url);
+  if (!s) {
+    s = makeSource({ name: `${item.source}: ${item.title}`.slice(0, 140), url, group: 'Free right now', network: item.source });
+    s.freeChannel = item.sourceId || item.source;
+    setLibrary([...library, s]);
+  }
+  return s;
+}
+
+const freeItemFor = (videoId) => freeNow.live.find((x) => x.videoId === videoId);
+
+/**
+ * Free channels also stream shows, press conferences and podcasts. Only streams that look like a
+ * game ("A vs. B", "A at B", or a matchup on the scoreboard) go into tiles on their own;
+ * everything else is listed with a Watch button.
+ */
+const MATCHUP = /\s(?:vs?\.?|versus|@)\s|\b[A-Z][\w.'&-]*(?:\s+[A-Z][\w.'&-]*)*\s+at\s+[A-Z]/;
+const looksLikeGame = (item) => MATCHUP.test(item.title || '') || !!gameFromTitle(item.title || '');
+
+function placeFree(tileId, item) {
+  const t = tileById(tileId);
+  const s = freeSourceFor(item);
+  t.sourceId = s.id;
+  t.gameKey = gameFromTitle(item.title) || null;
+  t.noGame = false;
+  t.filledAt = Date.now();
+  t.liveVideoId = item.videoId;
+  t.auto = 'free';
+}
+
+/**
+ * Keep free tiles current: swap an ended stream for the same channel's next one (or another free
+ * game), and, when "Start with free games" is on, fill empty tiles. Tiles you filled are never touched.
+ */
+function syncFreeTiles(initial) {
+  if (DEMO) return;
+  const items = [...freeNow.live].sort((a, b) => {
+    const ga = board.get(gameFromTitle(a.title));
+    const gb = board.get(gameFromTitle(b.title));
+    return (a.status === 'live' ? 0 : 1) - (b.status === 'live' ? 0 : 1) || (gb?.heat?.score ?? 0) - (ga?.heat?.score ?? 0);
+  });
+  const onScreen = () => new Set(S.tiles.map((t) => src(t.sourceId)?.url).filter(Boolean));
+  let changed = false;
+
+  for (const t of S.tiles) {
+    if (t.auto !== 'free' || !t.sourceId) continue;
+    const s = src(t.sourceId);
+    const vid = /[?&]v=([\w-]{11})/.exec(s?.url || '')?.[1];
+    if (vid && freeItemFor(vid)) continue; // still live
+    if (freeNow.stale || !freeNow.loaded) continue; // no fresh data: leave it alone
+    const next = items.find((x) => (x.sourceId || x.source) === s?.freeChannel && looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
+    if (next) placeFree(t.id, next);
+    else {
+      t.sourceId = null;
+      t.gameKey = null;
+      t.auto = null;
+    }
+    changed = true;
+  }
+
+  if (S.freeAuto) {
+    for (const id of visibleIds()) {
+      if (tileById(id).sourceId) continue;
+      const item = items.find((x) => looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
+      if (!item) break;
+      placeFree(id, item);
+      changed = true;
+    }
+  }
+
+  // Tidy the library: drop free entries that ended and aren't on a tile.
+  const inUse = new Set(S.tiles.map((t) => t.sourceId));
+  const keep = library.filter((s) => s.group !== 'Free right now' || inUse.has(s.id) || freeItemFor(/[?&]v=([\w-]{11})/.exec(s.url)?.[1]));
+  if (keep.length !== library.length) {
+    setLibrary(keep);
+    changed = true;
+  }
+
+  if (changed) {
+    if (initial && S.tiles.some((t) => t.auto === 'free' && t.sourceId)) S.seenIntro = true;
+    persistLib();
+    refresh();
+  }
+}
+
+function watchFree(videoId) {
+  const item = freeItemFor(videoId);
+  if (!item) return;
+  const showing = S.tiles.find((t) => src(t.sourceId)?.url === watchUrl(videoId));
+  if (showing) return setAudio(showing.id, { manual: true });
+  const tile = defaultTileFor(null);
+  placeFree(tile, item);
+  S.audio = tile;
+  persistLib();
+  refresh();
+  if (overlayPanel.matches) {
+    S.panel = false;
+    renderBar();
+  }
+}
+
+function freeSectionHtml() {
+  if (DEMO || EMBED) return '';
+  if (!freeNow.loaded) return `<section class="free-sec" aria-label="Free right now"><h3>${icon('tv')}Free right now</h3><p class="free-empty">Checking for free games…</p></section>`;
+  const tileOf = new Map();
+  visibleIds().forEach((id, i) => {
+    const url = src(tileById(id).sourceId)?.url;
+    if (url) tileOf.set(url, i + 1);
+  });
+  const rows = freeNow.live
+    .map((x) => {
+      const slot = tileOf.get(watchUrl(x.videoId));
+      return `<div class="free-item">
+        <span class="fr-badge ${x.status === 'live' ? 'live' : 'soon'}">${x.status === 'live' ? 'Live' : 'Soon'}</span>
+        <div class="fr-text"><b>${esc(x.title)}</b><span>${esc(x.source)} · free on YouTube</span></div>
+        <button class="btn small ${slot ? 'ghost' : 'primary'}" type="button" data-free-watch="${esc(x.videoId)}">${slot ? `Tile ${slot}` : 'Watch'}</button>
+      </div>`;
+    })
+    .join('');
+  const checked = freeNow.updatedAt ? ` Checked ${secondsAgo(new Date(freeNow.updatedAt).getTime())}.` : '';
+  const empty = freeNow.missing
+    ? '<p class="free-empty">Live free games show up here once the free-games check has run. It runs every 15 minutes. The places below are always free.</p>'
+    : freeNow.stale
+    ? '<p class="free-empty">The free-games check hasn’t run recently, so live streams can’t be listed. The places below are always free.</p>'
+    : freeNow.blocked
+    ? '<p class="free-empty">The free-games check couldn’t reach YouTube this time. It tries again every 15 minutes. The places below are always free.</p>'
+    : `<p class="free-empty">No official free streams are live right now.${esc(checked)} The places below are always free.</p>`;
+  const web = freeCatalog.filter((s) => s.kind === 'web');
+  const more = web.length
+    ? `<details class="free-more"><summary>More free places to watch (${web.length})</summary>${web
+        .map(
+          (s) => `<a class="fr-web" href="${esc(s.url)}" target="_blank" rel="noopener">
+            <b>${esc(s.name)}${icon('external')}</b><span>${esc(s.whatStreamsFree || '')}${s.needsAccount ? ' · free account' : ''}</span></a>`
+        )
+        .join('')}</details>`
+    : '';
+  return `<section class="free-sec" aria-label="Free right now"><h3>${icon('tv')}Free right now</h3>${rows || empty}${more}</section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2207,4 +2395,4 @@ function openAccount() {
 }
 
 // Exposed for debugging in the console.
-window.whiparound = { S, board, get library() { return library; }, views, get account() { return account; }, get ent() { return ent; } };
+window.whiparound = { S, board, get library() { return library; }, views, get account() { return account; }, get ent() { return ent; }, refreshFree, get freeNow() { return freeNow; } };
