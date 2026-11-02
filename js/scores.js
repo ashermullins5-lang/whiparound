@@ -152,6 +152,15 @@ export class Scoreboard extends EventTarget {
     this.timer = null;
     this.running = false;
     this.inflight = null;
+    this.source = null;
+  }
+
+  /** Load scores from somewhere else (e.g. the paid backend's /api/scores) instead of ESPN directly. */
+  setSource(fn) {
+    this.source = fn;
+    this.updatedAt = 0;
+    this.errors.clear();
+    this.refresh();
   }
 
   setLeagues(ids) {
@@ -207,8 +216,8 @@ export class Scoreboard extends EventTarget {
     const results = await Promise.allSettled(
       ids.map(async (id) => {
         const l = leagueById(id);
-        const data = this.demo ? this.demo.scoreboard(id) : await this.fetchJSON(scoreboardUrl(l));
-        return { l, events: data?.events || [] };
+        const data = this.demo ? this.demo.scoreboard(id) : this.source ? await this.source(l) : await this.fetchJSON(scoreboardUrl(l));
+        return { l, data: data || {} };
       })
     );
     const now = Date.now();
@@ -222,10 +231,14 @@ export class Scoreboard extends EventTarget {
         return;
       }
       this.errors.delete(id);
-      for (const ev of r.value.events) {
+      // A server source sends games already in our shape; ESPN sends raw events.
+      const { l, data } = r.value;
+      const items = Array.isArray(data.games) ? data.games : Array.isArray(data.events) ? data.events : [];
+      for (const item of items) {
         let g;
         try {
-          g = normalizeEvent(ev, r.value.l);
+          g = Array.isArray(data.games) ? { ...item, league: l.id, kind: l.kind, regPeriods: l.regPeriods } : normalizeEvent(item, l);
+          if (!g.key || !g.home || !g.away) continue;
         } catch {
           continue;
         }

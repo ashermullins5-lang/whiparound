@@ -44,6 +44,8 @@
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
       <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5M19 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20c.9-3.6 3.9-5.6 7.5-5.6s6.6 2 7.5 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.5c.5 3.5 5.5 5.5 5.5 11a5.5 5.5 0 0 1-11 0c0-2.6 1.4-4.2 2.6-5.3.2 1.8 1 2.8 2 3.3C10.8 8.6 11 5.4 12 2.5z" fill="currentColor"/></symbol>
     </defs>
   </svg>
@@ -60,6 +62,7 @@
           <svg class="i" aria-hidden="true"><use href="#i-bolt"></use></svg>
           <span>Auto Whip</span>
         </button>
+        <button class="plan-btn" id="planBtn" type="button" hidden></button>
         <button class="icon-btn" id="muteBtn" type="button" title="Mute all (M)" aria-pressed="false">
           <svg class="i" aria-hidden="true"><use href="#i-sound"></use></svg>
         </button>
@@ -71,6 +74,9 @@
         </button>
         <button class="icon-btn" id="fsBtn" type="button" title="Full screen (F)">
           <svg class="i" aria-hidden="true"><use href="#i-expand"></use></svg>
+        </button>
+        <button class="icon-btn account-btn" id="accountBtn" type="button" title="Sign in" hidden>
+          <svg class="i" aria-hidden="true"><use href="#i-user"></use></svg>
         </button>
         <button class="icon-btn" id="settingsBtn" type="button" title="Settings">
           <svg class="i" aria-hidden="true"><use href="#i-gear"></use></svg>

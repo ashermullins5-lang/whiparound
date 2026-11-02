@@ -123,7 +123,7 @@ import { youtubeChannel } from '../js/sources.js';
 import { darkVariant } from '../js/logos.js';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { parseYouTubeLive, channelLivePath } = require('../server.js');
+const { parseYouTubeLive, channelLivePath } = require('../dev-server.cjs');
 
 test('recognizes YouTube channel live links', () => {
   const cases = {

@@ -1,0 +1,9 @@
+# Not part of the hosted site
+/tests
+/dev-server.cjs
+/.nojekyll
+/supabase
+/.env
+/.env.*
+!/.env.example
+*.log

@@ -133,7 +133,7 @@ export class Player {
     this.plan = buildPlan(source.kind, source.url, this.proxy);
     if (!this.plan.length) {
       if (location.protocol === 'https:' && /^http:\/\//i.test(source.url)) {
-        return this.setState('error', 'This stream uses http://, which browsers block on https:// pages. Run Whiparound on your computer with server.js instead.');
+        return this.setState('error', 'This stream uses http://, which browsers block on https:// pages. Run Whiparound on your computer with npm start instead.');
       }
       return this.setState(
         'error',
@@ -534,7 +534,7 @@ function hlsMessage(data, viaProxy) {
     if (code === 0 || code === undefined) {
       return viaProxy
         ? "Couldn't reach the stream, even through the local server."
-        : "Couldn't load the stream. It may be offline, or it blocks web pages (CORS). Starting Whiparound with server.js fixes CORS.";
+        : "Couldn't load the stream. It may be offline, or it blocks web pages (CORS). Running Whiparound on your computer with npm start fixes CORS.";
     }
     if (viaProxy && code === 502) return "Couldn't reach the stream server. It may be offline or the link may be wrong.";
     if (code === 401 || code === 403) return `The stream server refused access (${code}). The link may need a login or may have expired.`;

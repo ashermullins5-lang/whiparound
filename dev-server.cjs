@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Whiparound local server. No dependencies; needs Node 18 or newer.
 //
-//   node server.js            serve on http://localhost:8080 (this computer only)
-//   node server.js --lan      also reachable from your iPad/phone/TV on the same Wi-Fi
-//   node server.js --port 9000
+//   npm start                 serve on http://localhost:8080 (this computer only)
+//   npm run lan               also reachable from your iPad/phone/TV on the same Wi-Fi
+//   node dev-server.cjs --port 9000
+//   npm run paid              same, plus the paid version's /api (reads keys from .env)
 //
 // Besides serving the app it relays streams and scoreboards that block browsers (CORS):
 //   GET /proxy?url=<http(s) url>        fetch and pass through; HLS playlists are rewritten
@@ -357,6 +358,31 @@ async function proxy(req, res, params) {
   stream.pipe(res);
 }
 
+// The paid version's /api endpoints (the same files Vercel runs). Without their keys in the
+// environment, /api/config answers { paywall: false } and the app stays fully unlocked.
+async function runPaidApi(name, req, res) {
+  let mod;
+  try {
+    mod = await import(require('node:url').pathToFileURL(path.join(ROOT, 'api', `${name}.js`)).href);
+  } catch {
+    return send(res, 404, 'Not found'); // e.g. `npm install` hasn't been run
+  }
+  const handler = mod[req.method];
+  if (!handler) return send(res, 405, 'Method not allowed');
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) if (v !== undefined) headers.set(k, Array.isArray(v) ? v.join(', ') : v);
+  const request = new Request(`http://${req.headers.host || 'localhost'}${req.url}`, {
+    method: req.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  const response = await handler(request);
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
+
 const server = http.createServer((req, res) => {
   let u;
   try {
@@ -368,6 +394,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Range' });
     return res.end();
   }
+  // The paid API takes POSTs (checkout, portal, Stripe webhooks), so route it before the GET-only check.
+  const paidApi = /^\/api\/(config|me|checkout|portal|stripe-webhook|scores)$/.exec(u.pathname);
+  if (paidApi) return void runPaidApi(paidApi[1], req, res).catch((e) => {
+    if (!res.headersSent) send(res, 500, String(e?.message || e));
+  });
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
   if (u.pathname.endsWith('/api/health')) {
     return send(res, 200, JSON.stringify({ ok: true, proxy: true }), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

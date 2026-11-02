@@ -9,7 +9,9 @@ import { makeSource, matchSources, searchLibrary, parseM3U, normName, KIND_LABEL
 import { createStorage } from './storage.js';
 import { Player } from './player.js';
 import { createDemo } from './demo.js';
-import { logoFor, onLogosReady } from './logos.js';
+import { logoFor, onLogosReady, setLogosEnabled } from './logos.js';
+import { entitlements, layoutAllowed, UPGRADE_REASONS, PLAN_ROWS } from './plan.js';
+import { loadConfig, createAccount } from './account.js';
 
 // ---------------------------------------------------------------------------
 // Setup & state
@@ -95,6 +97,15 @@ function demoState() {
 }
 
 const S = DEMO ? demoState() : loadState();
+
+// Paid mode: only when this copy is served with the hosted backend (/api/config says so).
+// Your own copy (the local helper, or a static host with no backend) and the demo keep everything unlocked.
+let PAID = false;
+let config = null;
+let account = null;
+let ent = entitlements('personal');
+const allowedLayout = (id) => layoutAllowed(ent, id);
+const whipOn = () => S.autoWhip && ent.autoWhip;
 let library = [];
 const libIndex = new Map();
 function setLibrary(list) {
@@ -111,7 +122,7 @@ const persist = debounce(() => {
 const persistLib = () => (DEMO ? Promise.resolve(true) : storage.saveLibrary(library));
 
 // ---------------------------------------------------------------------------
-// Network: optional local relay (server.js) for CORS-blocked streams and scores
+// Network: optional local relay (dev-server.cjs, `npm start`) for CORS-blocked streams and scores
 // ---------------------------------------------------------------------------
 
 let proxyOn = false;
@@ -149,7 +160,7 @@ async function fetchJSON(url) {
   return r.json();
 }
 
-/** Ask server.js which video a YouTube channel is streaming live. */
+/** Ask the local helper which video a YouTube channel is streaming live. */
 async function resolveYouTubeLive(liveUrl) {
   const r = await fetch(new URL(`api/youtube-live?url=${encodeURIComponent(liveUrl)}`, location.href), { cache: 'no-store' });
   const body = await r.json().catch(() => ({}));
@@ -165,7 +176,7 @@ async function fetchText(url) {
   } catch (e) {
     if (!proxyOn) {
       throw new Error(
-        /answered/.test(e.message) ? e.message : "Couldn't download it. The server may block browsers (CORS). Run Whiparound with server.js, or download the file and import it below."
+        /answered/.test(e.message) ? e.message : "Couldn't download it. The server may block browsers (CORS). Run Whiparound on your computer with npm start, or download the file and import it below."
       );
     }
     const r = await fetch(proxyFor(url, true), { cache: 'no-store' });
@@ -526,7 +537,7 @@ function toggleSolo(id) {
     applyLayoutAttr();
     makeMain(id, { manual: true });
   } else if (S.soloFrom) {
-    S.layout = S.soloFrom;
+    S.layout = allowedLayout(S.soloFrom) ? S.soloFrom : '2';
     S.soloFrom = null;
     applyLayoutAttr();
     refresh();
@@ -534,6 +545,7 @@ function toggleSolo(id) {
 }
 
 function setLayout(id) {
+  if (!allowedLayout(id)) return openUpgrade('layout');
   S.layout = id;
   S.soloFrom = null;
   applyLayoutAttr();
@@ -629,7 +641,7 @@ function dropGameOnTile(gameKey, tileId) {
 // ---------------------------------------------------------------------------
 
 function runWhip() {
-  if (!S.autoWhip) return;
+  if (!whipOn()) return;
   const now = Date.now();
   if (now - lastWhipAt < S.holdSec * 1000) return;
   const L = layoutById(S.layout);
@@ -661,7 +673,7 @@ function whipTo(id, g) {
 }
 
 function autoFill(now) {
-  if (!S.autoFill) return;
+  if (!S.autoFill || !ent.autoFill) return;
   const vis = visibleIds();
   const onScreen = new Set(vis.map((id) => tileById(id).gameKey).filter(Boolean));
   const candidates = board
@@ -712,7 +724,7 @@ const gameLine = (g) =>
 const alerted = new Map();
 let lastAlertAt = 0;
 function alertHot() {
-  if (!S.alerts) return;
+  if (!S.alerts || !ent.alerts) return;
   const now = Date.now();
   if (now - lastAlertAt < 20000) return;
   const onScreen = new Set(visibleIds().map((id) => tileById(id).gameKey).filter(Boolean));
@@ -800,11 +812,32 @@ function buildBar() {
   $('#settingsBtn').addEventListener('click', openSettings);
   $('#helpBtn').addEventListener('click', openHelp);
   $('#demoTag').hidden = !DEMO;
+  $('#planBtn').addEventListener('click', () => (account?.state.plan === 'pro' ? openAccount() : openUpgrade('generic')));
+  $('#accountBtn').addEventListener('click', () => (account?.state.user ? openAccount() : openSignIn()));
 }
 
 function renderBar() {
-  $$('#layouts .layout-btn').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.layout === S.layout)));
-  $('#whipBtn').setAttribute('aria-pressed', String(S.autoWhip));
+  $$('#layouts .layout-btn').forEach((b) => {
+    b.setAttribute('aria-checked', String(b.dataset.layout === S.layout));
+    const locked = !allowedLayout(b.dataset.layout);
+    b.classList.toggle('locked', locked);
+    b.title = `${LAYOUTS.find((l) => l.id === b.dataset.layout).label}${locked ? ' (Pro)' : ' (L)'}`;
+  });
+  const whipBtn = $('#whipBtn');
+  whipBtn.setAttribute('aria-pressed', String(whipOn()));
+  whipBtn.classList.toggle('locked', !ent.autoWhip);
+  whipBtn.title = ent.autoWhip ? 'Auto Whip (W)' : 'Auto Whip (Pro)';
+  const planBtn = $('#planBtn');
+  const accountBtn = $('#accountBtn');
+  planBtn.hidden = accountBtn.hidden = !PAID;
+  if (PAID) {
+    const pro = account?.state.plan === 'pro';
+    planBtn.classList.toggle('is-pro', pro);
+    planBtn.innerHTML = pro ? `${icon('check')}<span>Pro</span>` : `${icon('bolt')}<span>Go Pro</span>`;
+    planBtn.title = pro ? 'Your plan' : 'See what Pro unlocks';
+    accountBtn.title = account?.state.user ? `Signed in as ${account.state.user.email}` : 'Sign in';
+    accountBtn.classList.toggle('signed-in', !!account?.state.user);
+  }
   const mute = $('#muteBtn');
   mute.setAttribute('aria-pressed', String(S.muted));
   mute.innerHTML = icon(S.muted ? 'mute' : 'sound');
@@ -816,6 +849,7 @@ function renderBar() {
 }
 
 function toggleWhip() {
+  if (!ent.autoWhip) return openUpgrade('autoWhip');
   S.autoWhip = !S.autoWhip;
   lastWhipAt = 0;
   renderBar();
@@ -976,10 +1010,10 @@ gamesEl.addEventListener('dragstart', (e) => {
 // ---------- Score ticker: cycles through the scores a league at a time ----------
 
 const TICKER_MS = 5000;
-const tk = { pages: [], index: 0, timer: 0, hover: false, sig: '', html: '' };
+const tk = { pages: [], index: 0, timer: 0, hover: false, focus: false, sig: '', html: '' };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-function tickerPages() {
+function tickerPages(width) {
   const now = Date.now();
   const order = new Map(LEAGUES.map((l, i) => [l.id, i]));
   const rank = (g) => (g.state === 'in' ? 0 : g.state === 'post' ? 1 : 2);
@@ -993,7 +1027,6 @@ function tickerPages() {
   // first, then games live → final → upcoming, each by start time.
   const hasLive = (list) => (list.some((g) => g.state === 'in') ? 0 : 1);
   const leagues = [...groups.entries()].sort((a, b) => hasLive(a[1]) - hasLive(b[1]) || order.get(a[0]) - order.get(b[0]));
-  const width = $('#tkStage').clientWidth || 320;
   const per = Math.max(1, Math.min(6, Math.floor(width / 200)));
   const pages = [];
   for (const [league, list] of leagues) {
@@ -1004,7 +1037,7 @@ function tickerPages() {
   return pages;
 }
 
-function tickerCard(g) {
+function tickerCardInner(g) {
   const side = (t, other) => {
     const lead = g.state !== 'pre' && (t?.score ?? 0) > (other?.score ?? 0);
     const trail = g.state === 'post' && !lead;
@@ -1012,9 +1045,11 @@ function tickerCard(g) {
       g.state === 'pre' ? '' : `<span class="s">${esc(t?.score ?? 0)}</span>`
     }</span>`;
   };
-  return `<button type="button" class="tk ${g.state} ${g.heat?.score >= 35 ? 'hot' : ''}" data-key="${esc(g.key)}" title="${esc(`${g.away?.name} at ${g.home?.name}`)}">
-    ${side(g.away, g.home)}${side(g.home, g.away)}<span class="st">${esc(statusText(g, formatKickoff))}</span></button>`;
+  return `${side(g.away, g.home)}${side(g.home, g.away)}<span class="st">${esc(statusText(g, formatKickoff))}</span>`;
 }
+const tickerCardClass = (g) => `tk ${g.state} ${g.heat?.score >= 35 ? 'hot' : ''}`;
+const tickerCard = (g) =>
+  `<button type="button" class="${tickerCardClass(g)}" data-key="${esc(g.key)}" title="${esc(`${g.away?.name} at ${g.home?.name}`)}">${tickerCardInner(g)}</button>`;
 
 const tickerPageHtml = (p) =>
   p ? p.keys.map((k) => board.get(k)).filter(Boolean).map(tickerCard).join('') : `<span class="tk-empty">Scores show up here once games start.</span>`;
@@ -1022,6 +1057,10 @@ const tickerPageHtml = (p) =>
 function showTickerPage(animate) {
   const stage = $('#tkStage');
   const p = tk.pages[tk.index];
+  const focusedKey = stage.contains(document.activeElement) ? document.activeElement.dataset?.key : null;
+  // The progress bar restarts below, so the flip timer restarts with it.
+  clearTimeout(tk.timer);
+  tk.timer = 0;
   $('#tkLeague').textContent = p ? leagueShort(p.league) : 'Scores';
   $('#tkCount').textContent = tk.pages.length > 1 ? `${tk.index + 1}/${tk.pages.length}` : '';
   tk.html = tickerPageHtml(p);
@@ -1039,6 +1078,11 @@ function showTickerPage(animate) {
   }
   if (animate && !reduceMotion.matches) next.classList.add('in');
   stage.append(next);
+  // Keep keyboard users on the ticker: same game if it's still shown, else the first one.
+  if (focusedKey !== null) {
+    const target = $$('.tk', next).find((b) => b.dataset.key === focusedKey) || $('.tk', next);
+    target?.focus({ preventScroll: true });
+  }
   const bar = $('#tkProgress');
   bar.hidden = tk.pages.length <= 1;
   bar.style.animation = 'none';
@@ -1050,7 +1094,7 @@ function scheduleTicker() {
   if (tk.timer || tk.pages.length <= 1) return;
   tk.timer = setTimeout(() => {
     tk.timer = 0;
-    if (!tk.hover && !document.hidden && S.ticker && tk.pages.length > 1) {
+    if (!tk.hover && !tk.focus && !document.hidden && S.ticker && tk.pages.length > 1) {
       tk.index = (tk.index + 1) % tk.pages.length;
       showTickerPage(true);
     }
@@ -1060,21 +1104,35 @@ function scheduleTicker() {
 
 /** Rebuild the cycle after a score update, staying on the games currently shown. */
 function renderTicker() {
-  const pages = tickerPages();
+  // While the ticker is hidden (turned off, cinema mode) it has no width; keep the last layout.
+  const width = $('#tkStage').clientWidth;
+  if (!width) return;
+  const pages = tickerPages(width);
   const sig = pages.map((p) => `${p.league}:${p.keys.join(',')}`).join('|');
   if (sig !== tk.sig) {
+    const shownKeys = tk.pages[tk.index]?.keys.join() ?? null;
     const showing = tk.pages[tk.index]?.keys[0];
     tk.pages = pages;
     tk.sig = sig;
     const at = showing ? pages.findIndex((p) => p.keys.includes(showing)) : -1;
     tk.index = at >= 0 ? at : 0;
-    showTickerPage(false);
-  } else {
-    const html = tickerPageHtml(tk.pages[tk.index]);
+    // Only redraw (and restart the 5s clock) if what's on screen actually changed.
+    if (pages[tk.index]?.keys.join() !== shownKeys || !$('#tkStage .tk-page:not(.out)')) showTickerPage(false);
+    else $('#tkCount').textContent = pages.length > 1 ? `${tk.index + 1}/${pages.length}` : '';
+  }
+  if (sig === tk.sig) {
+    // Same games: update each card in place so a focused card keeps focus.
     const cur = $('#tkStage .tk-page:not(.out)');
-    if (cur && html !== tk.html) {
-      cur.innerHTML = html;
-      tk.html = html;
+    for (const btn of cur ? $$('.tk[data-key]', cur) : []) {
+      const g = board.get(btn.dataset.key);
+      if (!g) continue;
+      const inner = tickerCardInner(g);
+      if (btn.dataset.html !== inner) {
+        btn.innerHTML = inner;
+        btn.dataset.html = inner;
+      }
+      const cls = tickerCardClass(g);
+      if (btn.className !== cls) btn.className = cls;
     }
   }
   scheduleTicker();
@@ -1085,22 +1143,42 @@ ticker.addEventListener('click', (e) => {
   const card = e.target.closest('.tk[data-key]');
   if (card) openPicker({ gameKey: card.dataset.key });
 });
-ticker.addEventListener('mouseenter', () => {
+// Pause while a mouse is over it or a keyboard user is in it. Touch taps don't pause it:
+// phones fire a hover on tap and may never fire the matching leave.
+const resumeTicker = () => {
+  if (tk.hover || tk.focus) return;
+  ticker.classList.remove('paused');
+  showTickerPage(false);
+  scheduleTicker();
+};
+ticker.addEventListener('pointerenter', (e) => {
+  if (e.pointerType !== 'mouse') return;
   tk.hover = true;
   ticker.classList.add('paused');
 });
-ticker.addEventListener('mouseleave', () => {
+ticker.addEventListener('pointerleave', (e) => {
+  if (e.pointerType !== 'mouse' || !tk.hover) return;
   tk.hover = false;
-  ticker.classList.remove('paused');
-  clearTimeout(tk.timer);
-  tk.timer = 0;
-  showTickerPage(false);
-  scheduleTicker();
+  resumeTicker();
 });
-window.addEventListener('resize', debounce(() => {
+ticker.addEventListener('focusin', () => {
+  tk.focus = true;
+  ticker.classList.add('paused');
+});
+ticker.addEventListener('focusout', (e) => {
+  if (ticker.contains(e.relatedTarget)) return;
+  tk.focus = false;
+  resumeTicker();
+});
+// Re-split the pages whenever the ticker's width changes: rotation, resizing, or being shown again.
+let tickerWidth = 0;
+new ResizeObserver(() => {
+  const w = $('#tkStage').clientWidth;
+  if (!w || Math.abs(w - tickerWidth) < 8) return;
+  tickerWidth = w;
   tk.sig = '';
   renderTicker();
-}, 200));
+}).observe($('#tkStage'));
 
 function renderFeedStatus() {
   const el = $('#feedStatus');
@@ -1599,9 +1677,11 @@ function openSettings() {
         <select class="input" id="holdSec">${[10, 15, 25, 45, 90]
           .map((n) => `<option value="${n}" ${S.holdSec === n ? 'selected' : ''}>${n} seconds</option>`)
           .join('')}</select></div>
-      <label class="switch-row"><div><b>Fill tiles with hot games</b><span>When a game you have a saved stream for heats up, swap it into the coldest tile.</span></div><input type="checkbox" id="autoFill" ${S.autoFill ? 'checked' : ''}></label>
-      <label class="switch-row"><div><b>Hot game alerts</b><span>Tell me when a game that isn't on screen hits the red zone, crunch time, and so on.</span></div><input type="checkbox" id="alerts" ${S.alerts ? 'checked' : ''}></label>
+      <label class="switch-row"><div><b>Fill tiles with hot games${ent.autoFill ? '' : ' <span class="pro-tag">Pro</span>'}</b><span>When a game you have a saved stream for heats up, swap it into the coldest tile.</span></div><input type="checkbox" id="autoFill" ${S.autoFill && ent.autoFill ? 'checked' : ''} ${ent.autoFill ? '' : 'disabled'}></label>
+      <label class="switch-row"><div><b>Hot game alerts${ent.alerts ? '' : ' <span class="pro-tag">Pro</span>'}</b><span>Tell me when a game that isn't on screen hits the red zone, crunch time, and so on.</span></div><input type="checkbox" id="alerts" ${S.alerts && ent.alerts ? 'checked' : ''} ${ent.alerts ? '' : 'disabled'}></label>
+      ${ent.autoWhip ? '' : '<button class="btn small primary" type="button" id="settingsUpgrade">See Pro</button>'}
     </div>`);
+    $('#settingsUpgrade', whip)?.addEventListener('click', () => openUpgrade('generic'));
     $('#holdSec', whip).addEventListener('change', (e) => {
       S.holdSec = Number(e.target.value);
       persist();
@@ -1631,7 +1711,7 @@ function openSettings() {
         <label class="btn" for="importSetup">Import setup</label><input id="importSetup" type="file" accept="application/json,.json" hidden>
         ${DEMO ? `<a class="btn primary" href="${esc(location.pathname)}">Leave demo</a>` : `<a class="btn ghost" href="?demo">Open the demo</a>`}
       </div>
-      ${EMBED ? '<p class="hint">This is a preview with simulated games. Real streams and live scores need the full app running on your computer (node server.js).</p>' : ''}
+      ${EMBED ? '<p class="hint">This is a preview with simulated games. Real streams and live scores need the full app running on your computer (npm start).</p>' : ''}
       <div class="row" id="resetRow"><button class="btn danger" type="button" id="resetBtn">${icon('trash')}Reset everything</button></div>
     </div>`);
     $('#exportBtn', data).addEventListener('click', () => {
@@ -1699,7 +1779,7 @@ function openHelp() {
           <li><b>Free official streams</b> on YouTube or Twitch: paste the link. A YouTube channel link such as <code>youtube.com/@channel/live</code> plays whatever the channel is streaming, and switches by itself when it moves on to its next stream.</li>
           <li><b>ESPN+, Peacock, Prime Video, Paramount+, YouTube TV, Sunday Ticket</b> are DRM-protected and only play in their own apps. Use the links on each game to open them.</li>
         </ul>
-        <p>If a stream won't play in the browser because of CORS, start Whiparound with <code>node server.js</code>. It relays streams for you.</p>
+        <p>If a stream won't play in the browser because of CORS, run Whiparound on your computer with <code>npm start</code>. It relays streams for you.</p>
       </div>`)
     );
   });
@@ -1791,8 +1871,9 @@ document.addEventListener('keydown', (e) => {
     case 'c':
       return openChannels();
     case 'l': {
-      const i = LAYOUTS.findIndex((l) => l.id === S.layout);
-      return setLayout(LAYOUTS[(i + 1) % LAYOUTS.length].id);
+      const open = LAYOUTS.filter((l) => allowedLayout(l.id));
+      const i = open.findIndex((l) => l.id === S.layout);
+      return setLayout(open[(i + 1) % open.length].id);
     }
     case '?':
       return openHelp();
@@ -1832,7 +1913,8 @@ async function boot() {
   applyLayoutAttr();
   // Saved links get their type re-checked, so links saved before a new link type existed still play.
   setLibrary(DEMO ? demo.setup().library : (await storage.loadLibrary()).map((s) => (s.kind === 'demo' ? s : { ...s, kind: detectKind(s.url) })));
-  await detectProxy();
+  const [cfg] = await Promise.all([DEMO ? null : loadConfig(), detectProxy()]);
+  if (cfg) startPaidMode(cfg);
   openDeepLink();
   refresh();
   board.start();
@@ -1879,5 +1961,250 @@ function openDeepLink() {
   } catch {}
 }
 
+// ---------------------------------------------------------------------------
+// Paid mode: plans, sign-in, upgrade, account
+// ---------------------------------------------------------------------------
+
+function startPaidMode(cfg) {
+  PAID = true;
+  config = cfg;
+  setLogosEnabled(cfg.logos === true);
+  if (cfg.scores === 'server') {
+    board.setSource(async (l) => {
+      // Default caching on purpose: 'no-store' would force the CDN to refetch from the provider.
+      const r = await fetch(new URL(`api/scores?league=${encodeURIComponent(l.id)}`, location.href));
+      if (!r.ok) throw new Error(`Scores are unavailable right now (${r.status}).`);
+      return r.json();
+    });
+  }
+  account = createAccount(cfg, applyEntitlements);
+  applyEntitlements();
+  account.init().then(handleCheckoutReturn);
+}
+
+function applyEntitlements() {
+  ent = entitlements(PAID ? 'paid' : 'personal', account?.state.plan);
+  // Only fall back to a Free layout once the server has confirmed the plan, so a Pro
+  // subscriber's layout isn't lost while the page is still checking.
+  if (account?.state.ready && !allowedLayout(S.layout)) {
+    S.layout = '2';
+    S.soloFrom = null;
+    applyLayoutAttr();
+  }
+  refresh({ games: false });
+}
+
+const fmtDate = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+function planLine() {
+  const s = account?.state;
+  if (!s || s.plan !== 'pro') return 'Free plan';
+  if (s.status === 'trialing' && s.trialEnd) return `Pro, free trial until ${fmtDate(s.trialEnd)}`;
+  if (s.status === 'past_due') return 'Pro, but your last payment failed. Update your card in Manage billing.';
+  if (s.cancelAtPeriodEnd && s.periodEnd) return `Pro until ${fmtDate(s.periodEnd)}, then Free`;
+  if (s.periodEnd) return `Pro, renews ${fmtDate(s.periodEnd)}`;
+  return 'Pro';
+}
+
+async function handleCheckoutReturn() {
+  const result = params.get('checkout');
+  if (!result) return;
+  try {
+    const u = new URL(location.href);
+    u.searchParams.delete('checkout');
+    u.searchParams.delete('session_id');
+    history.replaceState(null, '', u.pathname + u.search);
+  } catch {}
+  if (result === 'cancel') return toast({ title: 'Checkout canceled', text: "You're still on Free. You can upgrade any time." });
+  if (result !== 'success') return;
+  toast({ title: 'Setting up Pro', text: 'Confirming your subscription…', ttl: 4000 });
+  // Stripe tells our server through a webhook, which can take a few seconds.
+  for (let i = 0; i < 12 && account.state.plan !== 'pro'; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    await account.refreshPlan();
+  }
+  if (account.state.plan === 'pro') toast({ title: 'Welcome to Pro', text: `${planLine()}. Everything is unlocked.`, ttl: 8000 });
+  else toast({ title: 'Payment received', text: "Pro will switch on in a moment. If it hasn't after a minute, reload the page.", ttl: 10000 });
+}
+
+const planCell = (v) =>
+  v === true ? `<span class="yes" aria-label="Included">${icon('check')}</span>` : v === false ? '<span class="no" aria-label="Not included">–</span>' : esc(v);
+
+function openUpgrade(reason = 'generic') {
+  if (!PAID || !account) return;
+  const s = account.state;
+  const prices = config.prices || {};
+  const trialDays = Number(config.trialDays) || 0;
+  let interval = prices.year ? 'year' : 'month';
+  openDialog('Whiparound Pro', (body) => {
+    body.append(
+      h(`<div class="sec"><p class="lead">${esc(UPGRADE_REASONS[reason] || UPGRADE_REASONS.generic)}</p></div>`),
+      h(`<div class="sec"><table class="plans"><thead><tr><th scope="col"><span class="visually-hidden">Feature</span></th><th scope="col">Free</th><th scope="col" class="pro">Pro</th></tr></thead>
+        <tbody>${PLAN_ROWS.map(([label, free, pro]) => `<tr><th scope="row">${esc(label)}</th><td>${planCell(free)}</td><td class="pro">${planCell(pro)}</td></tr>`).join('')}</tbody></table></div>`)
+    );
+    if (s.plan === 'pro') {
+      const box = h(`<div class="sec"><p class="hint">You're on ${esc(planLine())}.</p><div class="row"><button class="btn" type="button">Manage billing</button></div><p class="hint err-line" hidden></p></div>`);
+      box.querySelector('button').addEventListener('click', () => manageBilling(box));
+      body.append(box);
+      return;
+    }
+    const buy = h(`<div class="sec buy">
+      <div class="seg interval" role="group" aria-label="Billing period">
+        ${prices.year ? `<button type="button" data-int="year">Yearly<small>${esc(prices.year.label || '')}</small></button>` : ''}
+        ${prices.month ? `<button type="button" data-int="month">Monthly<small>${esc(prices.month.label || '')}</small></button>` : ''}
+      </div>
+      <button class="btn primary big" type="button" id="upGo">${trialDays ? `Start ${trialDays}-day free trial` : 'Upgrade to Pro'}</button>
+      <p class="hint">${trialDays ? "You won't be charged until the trial ends. " : ''}Cancel any time in Manage billing. Whiparound plays streams you already have access to; it doesn't include a TV or streaming subscription.</p>
+      <p class="hint err-line" hidden></p>
+    </div>`);
+    const seg = $('.interval', buy);
+    const drawSeg = () => $$('[data-int]', seg).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.int === interval)));
+    drawSeg();
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-int]');
+      if (b) {
+        interval = b.dataset.int;
+        drawSeg();
+      }
+    });
+    const go = $('#upGo', buy);
+    const err = $('.err-line', buy);
+    go.addEventListener('click', async () => {
+      if (!account.state.user) return openSignIn({ then: () => account.checkout(interval), note: 'Sign in first, then you’ll go straight to checkout.' });
+      go.disabled = true;
+      go.textContent = 'Opening checkout…';
+      err.hidden = true;
+      try {
+        await account.checkout(interval);
+      } catch (e) {
+        go.disabled = false;
+        go.textContent = trialDays ? `Start ${trialDays}-day free trial` : 'Upgrade to Pro';
+        err.hidden = false;
+        err.textContent = e.message;
+      }
+    });
+    body.append(buy);
+  });
+}
+
+async function manageBilling(box) {
+  const btn = box.querySelector('button');
+  const err = box.querySelector('.err-line');
+  btn.disabled = true;
+  try {
+    await account.manageBilling();
+  } catch (e) {
+    btn.disabled = false;
+    err.hidden = false;
+    err.textContent = e.message;
+  }
+}
+
+function openSignIn({ then = null, note = '' } = {}) {
+  if (!account) return;
+  let email = '';
+  openDialog('Sign in', (body) => {
+    const ask = h(`<form class="sec" novalidate>
+      <p class="hint">${esc(note || 'We’ll email you a 6-digit code. No password needed.')}</p>
+      <div class="field"><label for="siEmail">Email</label><input class="input" id="siEmail" name="email" type="email" autocomplete="email" inputmode="email" required></div>
+      <p class="hint err-line" role="alert" hidden></p>
+      <div class="row"><button class="btn primary" type="submit">Email me a code</button></div>
+    </form>`);
+    const verify = h(`<form class="sec" novalidate hidden>
+      <p class="hint" id="siSent"></p>
+      <div class="field"><label for="siCode">6-digit code</label><input class="input code-input" id="siCode" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></div>
+      <p class="hint err-line" role="alert" hidden></p>
+      <div class="row"><button class="btn primary" type="submit">Sign in</button><button class="btn ghost" type="button" id="siBack">Use a different email</button></div>
+    </form>`);
+    const fail = (form, msg) => {
+      const e = $('.err-line', form);
+      e.hidden = false;
+      e.textContent = msg;
+    };
+    ask.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      email = $('#siEmail', ask).value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(ask, 'Enter a valid email address.');
+      const btn = $('button[type="submit"]', ask);
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        await account.sendCode(email);
+        ask.hidden = true;
+        verify.hidden = false;
+        $('#siSent', verify).textContent = `We sent a code to ${email}. Enter it here, or tap the link in that email on this device.`;
+        $('#siCode', verify).focus();
+      } catch (err) {
+        fail(ask, err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Email me a code';
+      }
+    });
+    verify.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = $('#siCode', verify).value.replace(/\D/g, '');
+      if (code.length < 6) return fail(verify, 'Enter the 6-digit code from the email.');
+      const btn = $('button[type="submit"]', verify);
+      btn.disabled = true;
+      btn.textContent = 'Checking…';
+      try {
+        await account.verifyCode(email, code);
+        closeDialog();
+        toast({ title: 'Signed in', text: email, ttl: 3000 });
+        if (then) {
+          try {
+            await then();
+          } catch (err) {
+            toast({ title: "Couldn't open checkout", text: err.message });
+          }
+        }
+      } catch (err) {
+        fail(verify, err.message);
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+    $('#siBack', verify).addEventListener('click', () => {
+      verify.hidden = true;
+      ask.hidden = false;
+      $('#siEmail', ask).focus();
+    });
+    body.append(ask, verify);
+    if (matchMedia('(pointer: fine)').matches) setTimeout(() => $('#siEmail', ask)?.focus(), 30);
+  });
+}
+
+function openAccount() {
+  if (!account) return;
+  const s = account.state;
+  if (!s.user) return openSignIn();
+  openDialog('Your account', (body) => {
+    const box = h(`<div class="sec">
+      <div class="acct"><b>${esc(s.user.email)}</b><span>${esc(planLine())}</span></div>
+      ${s.error ? `<p class="hint err-line">${esc(s.error)}</p>` : ''}
+      <div class="row">
+        ${s.plan === 'pro' ? '<button class="btn" type="button" data-a="billing">Manage billing</button>' : '<button class="btn primary" type="button" data-a="pro">See Pro</button>'}
+        <button class="btn ghost" type="button" data-a="out">Sign out</button>
+      </div>
+      <p class="hint err-line" hidden></p>
+    </div>`);
+    box.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a === 'billing') manageBilling(box);
+      if (a === 'pro') openUpgrade('generic');
+      if (a === 'out') {
+        await account.signOut();
+        closeDialog();
+        toast({ title: 'Signed out', text: 'You’re on the Free plan on this device.', ttl: 3000 });
+      }
+    });
+    body.append(box);
+  });
+}
+
 // Exposed for debugging in the console.
-window.whiparound = { S, board, get library() { return library; }, views };
+window.whiparound = { S, board, get library() { return library; }, views, get account() { return account; }, get ent() { return ent; } };

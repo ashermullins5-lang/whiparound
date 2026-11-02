@@ -4,6 +4,12 @@
 // Each logo is probed once; results are remembered so re-renders never re-request a 404.
 
 const cache = new Map(); // feed logo URL -> { status: 'pending' | 'ok' | 'none', url, dark }
+let enabled = true;
+
+/** The paid version turns logos off: team logos are trademarks that need a license to show commercially. */
+export function setLogosEnabled(on) {
+  enabled = !!on;
+}
 let listener = null;
 let timer = 0;
 
@@ -46,7 +52,7 @@ function announce() {
 /** The logo to show for a team right now, or null (show letters). Starts loading on first ask. */
 export function logoFor(team) {
   const base = team?.logo;
-  if (!base || !/^https:\/\//i.test(base)) return null;
+  if (!enabled || !base || !/^https:\/\//i.test(base)) return null;
   const hit = cache.get(base);
   // A failed logo (often a slow network) gets another try after 5 minutes.
   if (hit && !(hit.status === 'none' && Date.now() - hit.at > 300000)) return hit.status === 'ok' ? hit : null;

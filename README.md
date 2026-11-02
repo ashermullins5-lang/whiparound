@@ -10,7 +10,7 @@ You need [Node.js](https://nodejs.org) 18 or newer. No install step and no depen
 
 ```bash
 cd whiparound
-node server.js
+npm start
 ```
 
 Open http://localhost:8080. To try it with simulated games first, open http://localhost:8080/?demo.
@@ -18,7 +18,7 @@ Open http://localhost:8080. To try it with simulated games first, open http://lo
 To watch on an iPad, iPhone, or a TV browser on the same Wi-Fi:
 
 ```bash
-node server.js --lan
+npm run lan
 ```
 
 It prints an address like `http://192.168.1.20:8080`. Open that on the iPad, then tap Share → **Add to Home Screen** to get a full-screen app icon.
@@ -61,19 +61,19 @@ Any game that just scored gets a short boost. Blowouts are marked down. Settings
 | **MPEG-TS links (`.ts`, IPTV "live" URLs)** | Yes on desktop browsers, via mpegts.js. iPhone needs the HLS version |
 | **MP4 / WebM files** | Yes |
 | **YouTube and Twitch** (free official streams) | Yes: paste the link |
-| **A YouTube channel's live stream** (`youtube.com/@channel/live`, `/channel/UC…`, `/c/name`, or links like `youtube.com/thefieldof68/live`) | Yes, with `server.js` running. The tile plays whatever the channel is streaming and moves to its next stream by itself. Without `server.js`, only `/channel/UC…` links work |
+| **A YouTube channel's live stream** (`youtube.com/@channel/live`, `/channel/UC…`, `/c/name`, or links like `youtube.com/thefieldof68/live`) | Yes, with the local helper running. The tile plays whatever the channel is streaming and moves to its next stream by itself. Without it, only `/channel/UC…` links work |
 | **ESPN+, Peacock, Prime Video, Paramount+, YouTube TV, NFL Sunday Ticket, DAZN** | No. These are DRM-protected and only play in their own apps. Each game has buttons that open the right service |
 | **HDHomeRun tuners directly** | Usually not: US broadcast TV is MPEG-2, which browsers can't decode. Put Channels DVR, Plex or Jellyfin in front of it; they convert it |
 
 An antenna plus a DVR app is the cheapest way to get CBS, FOX, NBC and ABC, which carry most NFL games.
 
-**Following a YouTube channel.** Paste a channel link instead of a single video. With `server.js` running, Whiparound checks the channel every minute, plays its current live video, and switches when the channel starts its next stream, which suits all-day events like a tournament or a season-opening marathon. When the stream title names both teams of a game on the scoreboard, the tile links that game, so the score overlay and Auto Whip follow along. If the channel isn't live, the tile says so and keeps checking.
+**Following a YouTube channel.** Paste a channel link instead of a single video. With the local helper running (`npm start`), Whiparound checks the channel every minute, plays its current live video, and switches when the channel starts its next stream, which suits all-day events like a tournament or a season-opening marathon. When the stream title names both teams of a game on the scoreboard, the tile links that game, so the score overlay and Auto Whip follow along. If the channel isn't live, the tile says so and keeps checking.
 
 **Tag your channels with a network.** When you add a link, fill in "Network it carries" (for example `CBS`). Whiparound then suggests that channel for every game on CBS. Channels whose names include both teams (common for IPTV event channels) are matched to the game automatically.
 
-## Why run it with server.js
+## Why run the local helper
 
-Many stream servers block web pages from loading their video (CORS). `server.js` serves the app and also relays those streams: when a direct load fails, Whiparound retries through the relay without you doing anything. It also rewrites HLS playlists so every segment goes through the relay.
+Many stream servers block web pages from loading their video (CORS). The helper (`dev-server.cjs`, started with `npm start`) serves the app and also relays those streams: when a direct load fails, Whiparound retries through the relay without you doing anything. It also rewrites HLS playlists so every segment goes through the relay.
 
 You can host the folder on any static web host instead, but then:
 
@@ -96,7 +96,7 @@ js/logos.js           team logos with dark-background versions and a letters fal
 js/leagues.js         followed leagues and official watch links
 js/demo.js            simulated games for ?demo
 js/storage.js         settings (localStorage) and channel library (IndexedDB)
-server.js             static server, stream relay, YouTube channel live lookup
+dev-server.cjs        local helper: static server, stream relay, YouTube channel live lookup
 vendor/               hls.js 1.7.3 and mpegts.js 1.8.2 (Apache-2.0)
 tests/                unit tests: npm test
 ```
