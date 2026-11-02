@@ -2046,11 +2046,14 @@ function placeFree(tileId, item) {
  */
 function syncFreeTiles(initial) {
   if (DEMO) return;
+  const rank = { live: 0, onair: 1, upcoming: 2 };
   const items = [...freeNow.live].sort((a, b) => {
     const ga = board.get(gameFromTitle(a.title));
     const gb = board.get(gameFromTitle(b.title));
-    return (a.status === 'live' ? 0 : 1) - (b.status === 'live' ? 0 : 1) || (gb?.heat?.score ?? 0) - (ga?.heat?.score ?? 0);
+    return (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || (gb?.heat?.score ?? 0) - (ga?.heat?.score ?? 0);
   });
+  // Only games that are on (or just about to be) go into tiles by themselves; later ones are listed.
+  const onNow = (x) => x.status === 'live' || x.status === 'onair';
   const onScreen = () => new Set(S.tiles.map((t) => src(t.sourceId)?.url).filter(Boolean));
   let changed = false;
 
@@ -2060,7 +2063,7 @@ function syncFreeTiles(initial) {
     const vid = /[?&]v=([\w-]{11})/.exec(s?.url || '')?.[1];
     if (vid && freeItemFor(vid)) continue; // still live
     if (freeNow.stale || !freeNow.loaded) continue; // no fresh data: leave it alone
-    const next = items.find((x) => (x.sourceId || x.source) === s?.freeChannel && looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
+    const next = items.find((x) => (x.sourceId || x.source) === s?.freeChannel && onNow(x) && x.embeddable !== false && looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
     if (next) placeFree(t.id, next);
     else {
       t.sourceId = null;
@@ -2073,7 +2076,7 @@ function syncFreeTiles(initial) {
   if (S.freeAuto) {
     for (const id of visibleIds()) {
       if (tileById(id).sourceId) continue;
-      const item = items.find((x) => looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
+      const item = items.find((x) => onNow(x) && x.embeddable !== false && looksLikeGame(x) && !onScreen().has(watchUrl(x.videoId)));
       if (!item) break;
       placeFree(id, item);
       changed = true;
@@ -2123,9 +2126,13 @@ function freeSectionHtml() {
     .map((x) => {
       const slot = tileOf.get(watchUrl(x.videoId));
       return `<div class="free-item">
-        <span class="fr-badge ${x.status === 'live' ? 'live' : 'soon'}">${x.status === 'live' ? 'Live' : 'Soon'}</span>
+        <span class="fr-badge ${x.status === 'live' ? 'live' : x.status === 'onair' ? 'onair' : 'soon'}">${x.status === 'live' ? 'Live' : x.status === 'onair' ? 'On air' : 'Later'}</span>
         <div class="fr-text"><b>${esc(x.title)}</b><span>${esc(x.source)} · free on YouTube</span></div>
-        <button class="btn small ${slot ? 'ghost' : 'primary'}" type="button" data-free-watch="${esc(x.videoId)}">${slot ? `Tile ${slot}` : 'Watch'}</button>
+        ${
+          x.embeddable === false
+            ? `<a class="btn small" href="${esc(watchUrl(x.videoId))}" target="_blank" rel="noopener" title="This channel only allows watching on YouTube">${icon('external')}YouTube</a>`
+            : `<button class="btn small ${slot ? 'ghost' : 'primary'}" type="button" data-free-watch="${esc(x.videoId)}">${slot ? `Tile ${slot}` : 'Watch'}</button>`
+        }
       </div>`;
     })
     .join('');

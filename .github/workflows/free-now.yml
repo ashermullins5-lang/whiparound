@@ -20,14 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
 
+      - name: Get the last published result
+        run: |
+          mkdir -p out
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/free-now/free-now.json" -o prev.json || true
+
       - name: Check which official free channels are live
-        run: node scripts/free-now.mjs out/free-now.json
+        run: node scripts/free-now.mjs out/free-now.json prev.json
 
       - name: Publish to the free-now branch
         env:

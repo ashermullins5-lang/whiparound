@@ -171,7 +171,7 @@ test('reads live, upcoming and offline channel pages', () => {
     '<title>High Point vs. Liberty | Opening Day Marathon - YouTube</title><link rel="canonical" href="https://www.youtube.com/watch?v=AbCdEfGhIjK">' +
       '<meta itemprop="channelId" content="UCaaaaaaaaaaaaaaaaaaaaaa"><script>var x={"videoDetails":{"videoId":"AbCdEfGhIjK","isLive":true},"isLiveNow":true}</script>'
   );
-  assert.deepEqual(live, { videoId: 'AbCdEfGhIjK', live: true, upcoming: false, channelId: 'UCaaaaaaaaaaaaaaaaaaaaaa', title: 'High Point vs. Liberty | Opening Day Marathon' });
+  assert.deepEqual(live, { videoId: 'AbCdEfGhIjK', live: true, upcoming: false, embeddable: true, channelId: 'UCaaaaaaaaaaaaaaaaaaaaaa', title: 'High Point vs. Liberty | Opening Day Marathon' });
 
   const soon = parseYouTubeLive('<link rel="canonical" href="https://www.youtube.com/watch?v=ZZZZZZZZZZZ"><meta name="title" content="Game 2 &amp; more">"isLiveNow":false,"upcomingEventData":{"startTime":"1"}');
   assert.equal(soon.videoId, 'ZZZZZZZZZZZ');

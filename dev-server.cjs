@@ -213,6 +213,8 @@ function parseYouTubeLive(html) {
     videoId,
     live,
     upcoming,
+    // false when the channel turned off playing on other sites; unknown counts as playable
+    embeddable: player?.playabilityStatus?.playableInEmbed !== false,
     channelId: channelId && /^UC[\w-]{22}$/.test(channelId) ? channelId : null,
     title: decodeHtml(String(rawTitle)).trim().slice(0, 300),
   };
@@ -271,35 +273,52 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Check each YouTube channel in the free-sources catalog and list the ones that are live or about
  * to start. Used by /api/free-now here and by scripts/free-now.mjs in the scheduled job.
  */
-async function checkFreeNow(sources, { gapMs = 1500, log = () => {} } = {}) {
+async function checkFreeNow(sources, { gapMs = 1500, retryMs = 6000, prev = null, log = () => {} } = {}) {
   const live = [];
   const errors = [];
+  const blocked = [];
   const channels = sources.filter((s) => s.kind === 'youtube' && /^UC[\w-]{22}$/.test(s.youtubeChannelId || ''));
+  const look = async (src) => {
+    const r = await fetchYouTube(`/channel/${src.youtubeChannelId}/live`);
+    if (r.consent) throw new Error('consent page');
+    if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
+    const info = parseYouTubeLive(r.html || '');
+    if (info.consent) throw new Error('consent page');
+    return info;
+  };
+  // A stream the previous check saw in the last 45 minutes, for channels YouTube won't show us now.
+  const prevFresh = prev && Date.now() - new Date(prev.updatedAt).getTime() < 45 * 60e3 ? prev.live || [] : [];
   for (const [i, src] of channels.entries()) {
     if (i) await sleep(gapMs); // polite: one request at a time
     try {
-      const r = await fetchYouTube(`/channel/${src.youtubeChannelId}/live`);
-      if (r.consent) throw new Error('consent page');
-      if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
-      const info = parseYouTubeLive(r.html || '');
-      if (info.consent) throw new Error('consent page');
-      log(`${src.name}: ${info.videoId ? (info.live ? 'LIVE' : info.upcoming ? 'upcoming' : 'not live') : 'not live'}${info.blocked ? ' (bot check)' : ''}`);
-      if (info.videoId && (info.live || info.upcoming)) {
-        live.push({
-          sourceId: src.id,
-          source: src.name,
-          sports: src.sports || [],
-          videoId: info.videoId,
-          title: info.title || src.name,
-          status: info.live ? 'live' : 'upcoming',
-        });
+      let info = await look(src);
+      if (info.blocked && !info.videoId) {
+        await sleep(retryMs); // YouTube's bot check is per request; one retry often gets through
+        info = await look(src);
+      }
+      if (info.blocked && !info.videoId) {
+        blocked.push(src.id);
+        const carried = prevFresh.find((x) => x.sourceId === src.id);
+        log(`${src.name}: bot check${carried ? ', keeping the last result' : ''}`);
+        if (carried) live.push({ ...carried, carried: true });
+        continue;
+      }
+      // YouTube sometimes answers a server with a "confirm you're not a bot" page. It still names
+      // the video, and /live only serves a video while the channel is live or about to go live,
+      // so that counts as on air. (People's own browsers play it normally.)
+      const onAir = !!(info.blocked && info.videoId && !info.live && !info.upcoming);
+      const status = info.live ? 'live' : onAir ? 'onair' : info.upcoming ? 'upcoming' : null;
+      log(`${src.name}: ${status || 'not live'}${info.blocked ? ' (bot check)' : ''}`);
+      if (info.videoId && status) {
+        const title = info.title && !/^youtube$/i.test(info.title) ? info.title : `${src.name} live stream`;
+        live.push({ sourceId: src.id, source: src.name, sports: src.sports || [], videoId: info.videoId, title, status, embeddable: info.embeddable });
       }
     } catch (e) {
       errors.push({ sourceId: src.id, error: String(e.message || e) });
       log(`${src.name}: error ${e.message || e}`);
     }
   }
-  return { updatedAt: new Date().toISOString(), live, errors, checked: channels.length };
+  return { updatedAt: new Date().toISOString(), live, errors, blocked, checked: channels.length };
 }
 
 // The helper checks in the background (at start, then every 10 minutes) and answers instantly

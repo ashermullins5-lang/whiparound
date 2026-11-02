@@ -24,7 +24,8 @@ async function getJson(url, ms) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(url, { signal: ctl.signal });
+    // 'no-cache' revalidates (a cheap 304) instead of reusing an old copy; no custom headers, so no preflight.
+    const r = await fetch(url, { signal: ctl.signal, cache: 'no-cache' });
     if (!r.ok || !/json|text\/plain/.test(r.headers.get('content-type') || '')) return null;
     return await r.json();
   } catch {
