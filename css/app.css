@@ -1,5 +1,5 @@
 /* Layout: control-room video wall. A thin bar on top, tiles fill the stage, the scoreboard
-   rail sits on the right, and a score crawl runs along the bottom. Dark only, on purpose:
+   rail sits on the right, and a score ticker cycles along the bottom. Dark only, on purpose:
    it's a screen for watching video. */
 :root {
   --ink: #0a0d13;       /* page and the gaps between tiles */
@@ -769,41 +769,78 @@ a { color: var(--amber); }
   text-transform: uppercase;
 }
 
-/* ---------- Ticker ---------- */
+/* ---------- Ticker: cycles through scores a league at a time ---------- */
 .ticker {
   grid-area: ticker;
-  height: 34px;
+  display: flex;
+  align-items: stretch;
+  height: 38px;
   overflow: hidden;
   background: var(--deck);
   border-top: 1px solid var(--rim);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-sizing: content-box;
+}
+.tk-label {
   position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 82px;
+  padding: 0 22px 0 calc(12px + env(safe-area-inset-left, 0px));
+  background: var(--amber);
+  color: var(--amber-ink);
+  font: 800 15px/1 var(--f-num);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
 }
-.ticker-track {
-  display: flex;
-  width: max-content;
-  height: 34px;
-  align-items: center;
-  animation: crawl var(--crawl, 60s) linear infinite;
+.tk-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--amber-ink);
+  opacity: .35;
+  transform-origin: left;
+  animation: tk-progress 5s linear both;
 }
-.ticker:hover .ticker-track { animation-play-state: paused; }
+.ticker.paused .tk-progress { animation-play-state: paused; }
+.tk-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+.tk-page { position: absolute; inset: 0; display: flex; align-items: stretch; }
+.tk-page.in { animation: tk-in .42s cubic-bezier(.2,.8,.2,1) both; }
+.tk-page.out { animation: tk-out .32s ease-in both; pointer-events: none; }
 .tk {
-  display: inline-flex;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 320px;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 18px;
+  gap: 12px;
+  padding: 0 14px;
+  border: 0;
   border-right: 1px solid var(--rim);
+  background: transparent;
+  color: var(--dim);
   font: 600 15px/1 var(--f-num);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: var(--dim);
+  text-align: left;
+  overflow: hidden;
 }
-.tk .lg { color: var(--amber); letter-spacing: .08em; font-size: 12px; }
-.tk .t { color: var(--chalk); }
-.tk .s { color: var(--chalk); font-weight: 700; }
+.tk:hover { background: var(--well); }
+.tk-team { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.tk-team b { color: var(--chalk); font-weight: 600; letter-spacing: .03em; }
+.tk-team .s { color: var(--chalk); font-weight: 700; }
+.tk-team.trail b, .tk-team.trail .s { color: var(--dim); }
+.tk .st { margin-left: auto; padding-left: 4px; font-size: 13px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.tk.in .st { color: var(--chalk); }
+.tk.in .st::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 5px 2px 0; border-radius: 50%; background: var(--live); }
 .tk.hot .st { color: var(--heat); }
-.tk-empty { padding: 0 16px; color: var(--dim); font-size: 13px; line-height: 34px; }
+.tk-count { flex: none; display: grid; place-items: center; padding: 0 calc(12px + env(safe-area-inset-right, 0px)) 0 12px; font: 600 12px/1 var(--f-num); letter-spacing: .06em; color: var(--dim); }
+.tk-empty { display: flex; align-items: center; height: 100%; padding: 0 16px; color: var(--dim); font-size: 13px; }
 
 /* ---------- Dialog sheet ---------- */
 .sheet {
@@ -1021,7 +1058,9 @@ kbd {
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 50% { opacity: .45; } }
 @keyframes blink { 50% { opacity: .25; } }
-@keyframes crawl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes tk-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes tk-in { from { transform: translateY(100%); } }
+@keyframes tk-out { to { transform: translateY(-100%); opacity: 0; } }
 @keyframes drop-in { from { opacity: 0; transform: translate(-50%, -14px); } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes flash-in { from { opacity: 0; transform: skewX(-8deg) scale(.6); } }
@@ -1029,8 +1068,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
-  .ticker-track { animation: none !important; overflow-x: auto; width: auto; }
-  .ticker { overflow-x: auto; }
+  .tk-progress { display: none; }
   .flash-card { animation: none !important; }
 }
 
@@ -1073,7 +1111,6 @@ kbd {
     grid-template-areas: "bar" "stage" "panel" "ticker";
   }
   .app.panel-closed .panel { display: flex; }
-  .app .ticker { display: none; }
   .app.cinema { grid-template-rows: 0 auto 0 0; }
   .app.cinema .stage { align-self: center; }
   .stage { container-type: inline-size; display: block; }
@@ -1088,7 +1125,7 @@ kbd {
   .panel { border-left: 0; border-top: 1px solid var(--rim); }
   #gamesBtn { display: none; }
   .whip-banner { font-size: 13px; top: 8px; }
-  .toasts { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .toasts { bottom: calc(50px + env(safe-area-inset-bottom, 0px)); }
 }
 
 @media (max-width: 640px) {

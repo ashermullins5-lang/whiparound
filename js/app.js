@@ -973,29 +973,134 @@ gamesEl.addEventListener('dragstart', (e) => {
   e.dataTransfer.effectAllowed = 'copy';
 });
 
-let tickerHtml = '';
-function renderTicker() {
-  const items = board
-    .list()
-    .filter((g) => g.state !== 'pre')
-    .sort((a, b) => (a.state === b.state ? (b.heat?.score ?? 0) - (a.heat?.score ?? 0) : a.state === 'in' ? -1 : 1))
-    .slice(0, 40);
-  const one = items
-    .map(
-      (g) => `<span class="tk ${g.heat?.score >= 35 ? 'hot' : ''}"><span class="lg">${esc(leagueShort(g.league))}</span>
-      ${logoFor(g.away) ? teamMark(g.away, 'tk-logo') : ''}<span class="t">${esc(g.away?.abbr)}</span><span class="s">${esc(g.away?.score ?? 0)}</span>
-      ${logoFor(g.home) ? teamMark(g.home, 'tk-logo') : ''}<span class="t">${esc(g.home?.abbr)}</span><span class="s">${esc(g.home?.score ?? 0)}</span>
-      <span class="st">${esc(statusText(g, formatKickoff))}</span></span>`
-    )
-    .join('');
-  const html = one ? one + one : `<span class="tk-empty">Scores will scroll here once games start.</span>`;
-  if (html === tickerHtml) return;
-  tickerHtml = html;
-  const track = $('#tickerTrack');
-  track.innerHTML = html;
-  track.style.setProperty('--crawl', `${Math.max(30, items.length * 6)}s`);
-  track.style.animationName = one ? '' : 'none';
+// ---------- Score ticker: cycles through the scores a league at a time ----------
+
+const TICKER_MS = 5000;
+const tk = { pages: [], index: 0, timer: 0, hover: false, sig: '', html: '' };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+function tickerPages() {
+  const now = Date.now();
+  const order = new Map(LEAGUES.map((l, i) => [l.id, i]));
+  const rank = (g) => (g.state === 'in' ? 0 : g.state === 'post' ? 1 : 2);
+  const groups = new Map();
+  for (const g of board.list()) {
+    if (g.state === 'pre' && new Date(g.date) - now > 6 * 3600e3) continue;
+    if (!groups.has(g.league)) groups.set(g.league, []);
+    groups.get(g.league).push(g);
+  }
+  // A steady order, so the cycle doesn't jump around as scores change: leagues with live games
+  // first, then games live → final → upcoming, each by start time.
+  const hasLive = (list) => (list.some((g) => g.state === 'in') ? 0 : 1);
+  const leagues = [...groups.entries()].sort((a, b) => hasLive(a[1]) - hasLive(b[1]) || order.get(a[0]) - order.get(b[0]));
+  const width = $('#tkStage').clientWidth || 320;
+  const per = Math.max(1, Math.min(6, Math.floor(width / 200)));
+  const pages = [];
+  for (const [league, list] of leagues) {
+    list.sort((a, b) => rank(a) - rank(b) || new Date(a.date) - new Date(b.date) || a.key.localeCompare(b.key));
+    const shown = list.slice(0, 36);
+    for (let i = 0; i < shown.length; i += per) pages.push({ league, keys: shown.slice(i, i + per).map((g) => g.key) });
+  }
+  return pages;
 }
+
+function tickerCard(g) {
+  const side = (t, other) => {
+    const lead = g.state !== 'pre' && (t?.score ?? 0) > (other?.score ?? 0);
+    const trail = g.state === 'post' && !lead;
+    return `<span class="tk-team ${trail ? 'trail' : ''}">${logoFor(t) ? teamMark(t, 'tk-logo') : ''}<b>${esc(t?.abbr)}</b>${
+      g.state === 'pre' ? '' : `<span class="s">${esc(t?.score ?? 0)}</span>`
+    }</span>`;
+  };
+  return `<button type="button" class="tk ${g.state} ${g.heat?.score >= 35 ? 'hot' : ''}" data-key="${esc(g.key)}" title="${esc(`${g.away?.name} at ${g.home?.name}`)}">
+    ${side(g.away, g.home)}${side(g.home, g.away)}<span class="st">${esc(statusText(g, formatKickoff))}</span></button>`;
+}
+
+const tickerPageHtml = (p) =>
+  p ? p.keys.map((k) => board.get(k)).filter(Boolean).map(tickerCard).join('') : `<span class="tk-empty">Scores show up here once games start.</span>`;
+
+function showTickerPage(animate) {
+  const stage = $('#tkStage');
+  const p = tk.pages[tk.index];
+  $('#tkLeague').textContent = p ? leagueShort(p.league) : 'Scores';
+  $('#tkCount').textContent = tk.pages.length > 1 ? `${tk.index + 1}/${tk.pages.length}` : '';
+  tk.html = tickerPageHtml(p);
+  const next = document.createElement('div');
+  next.className = 'tk-page';
+  next.innerHTML = tk.html;
+  for (const old of [...stage.children]) {
+    if (animate && !reduceMotion.matches) {
+      old.classList.remove('in');
+      old.classList.add('out');
+      setTimeout(() => old.remove(), 400);
+    } else {
+      old.remove();
+    }
+  }
+  if (animate && !reduceMotion.matches) next.classList.add('in');
+  stage.append(next);
+  const bar = $('#tkProgress');
+  bar.hidden = tk.pages.length <= 1;
+  bar.style.animation = 'none';
+  void bar.offsetWidth;
+  bar.style.animation = '';
+}
+
+function scheduleTicker() {
+  if (tk.timer || tk.pages.length <= 1) return;
+  tk.timer = setTimeout(() => {
+    tk.timer = 0;
+    if (!tk.hover && !document.hidden && S.ticker && tk.pages.length > 1) {
+      tk.index = (tk.index + 1) % tk.pages.length;
+      showTickerPage(true);
+    }
+    scheduleTicker();
+  }, TICKER_MS);
+}
+
+/** Rebuild the cycle after a score update, staying on the games currently shown. */
+function renderTicker() {
+  const pages = tickerPages();
+  const sig = pages.map((p) => `${p.league}:${p.keys.join(',')}`).join('|');
+  if (sig !== tk.sig) {
+    const showing = tk.pages[tk.index]?.keys[0];
+    tk.pages = pages;
+    tk.sig = sig;
+    const at = showing ? pages.findIndex((p) => p.keys.includes(showing)) : -1;
+    tk.index = at >= 0 ? at : 0;
+    showTickerPage(false);
+  } else {
+    const html = tickerPageHtml(tk.pages[tk.index]);
+    const cur = $('#tkStage .tk-page:not(.out)');
+    if (cur && html !== tk.html) {
+      cur.innerHTML = html;
+      tk.html = html;
+    }
+  }
+  scheduleTicker();
+}
+
+const ticker = $('#ticker');
+ticker.addEventListener('click', (e) => {
+  const card = e.target.closest('.tk[data-key]');
+  if (card) openPicker({ gameKey: card.dataset.key });
+});
+ticker.addEventListener('mouseenter', () => {
+  tk.hover = true;
+  ticker.classList.add('paused');
+});
+ticker.addEventListener('mouseleave', () => {
+  tk.hover = false;
+  ticker.classList.remove('paused');
+  clearTimeout(tk.timer);
+  tk.timer = 0;
+  showTickerPage(false);
+  scheduleTicker();
+});
+window.addEventListener('resize', debounce(() => {
+  tk.sig = '';
+  renderTicker();
+}, 200));
 
 function renderFeedStatus() {
   const el = $('#feedStatus');
@@ -1511,7 +1616,7 @@ function openSettings() {
     });
 
     const disp = h(`<div class="sec"><h3>Display</h3>
-      <label class="switch-row"><div><b>Score crawl</b><span>Scrolling scores along the bottom of the screen.</span></div><input type="checkbox" id="tickerOn" ${S.ticker ? 'checked' : ''}></label>
+      <label class="switch-row"><div><b>Score ticker</b><span>Scores cycle along the bottom of the screen, a league at a time.</span></div><input type="checkbox" id="tickerOn" ${S.ticker ? 'checked' : ''}></label>
     </div>`);
     $('#tickerOn', disp).addEventListener('change', (e) => {
       S.ticker = e.target.checked;
