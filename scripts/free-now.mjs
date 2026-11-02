@@ -17,7 +17,8 @@ let prev = null;
 try {
   if (prevPath && existsSync(prevPath)) prev = JSON.parse(await readFile(prevPath, 'utf8'));
 } catch {}
-const result = await checkFreeNow(catalog.sources || [], { prev, log: (m) => console.log(m) });
+// Optional: a free YouTube Data API key (repo secret YOUTUBE_API_KEY) checks channels that bot-check us.
+const result = await checkFreeNow(catalog.sources || [], { prev, apiKey: process.env.YOUTUBE_API_KEY || '', log: (m) => console.log(m) });
 await mkdir(dirname(outPath), { recursive: true });
 await writeFile(outPath, JSON.stringify(result, null, 1) + '\n');
 console.log(`\n${result.live.length} live or upcoming of ${result.checked} channels checked; ${result.blocked.length} bot-checked; ${result.errors.length} errors → ${outPath}`);

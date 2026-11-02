@@ -32,6 +32,10 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/free-now/free-now.json" -o prev.json || true
 
       - name: Check which official free channels are live
+        env:
+          # Optional free key (Settings → Secrets and variables → Actions). Used only for channels
+          # where YouTube shows the checker a "confirm you're not a bot" page.
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: node scripts/free-now.mjs out/free-now.json prev.json
 
       - name: Publish to the free-now branch

@@ -17,8 +17,23 @@ const pages = {
   '/channel/UCbotbotbotbotbotbotbo01/live':
     '<title>YouTube</title><link rel="canonical" href="https://www.youtube.com/watch?v=BOTVIDEO001"><script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED","reason":"Sign in to confirm you’re not a bot"},"videoDetails":{"videoId":"BOTVIDEO001"}};var x=1;</script>',
 };
+const api = {
+  '/youtube/v3/playlistItems': { items: [{ contentDetails: { videoId: 'OLDVIDEO001' } }, { contentDetails: { videoId: 'APILIVE0001' } }] },
+  '/youtube/v3/videos': {
+    items: [
+      { id: 'OLDVIDEO001', snippet: { title: 'Last week', liveBroadcastContent: 'none' }, status: { embeddable: true } },
+      { id: 'APILIVE0001', snippet: { title: 'Grambling State vs. Northern Illinois', liveBroadcastContent: 'live' }, status: { embeddable: true } },
+    ],
+  },
+};
+const apiCalls = [];
 const server = http.createServer((req, res) => {
   const path = req.url.split('?')[0];
+  if (api[path]) {
+    apiCalls.push(req.url);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(api[path]));
+  }
   if (pages[path]) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(pages[path]);
@@ -28,6 +43,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 process.env.WHIP_YOUTUBE_ORIGIN = `http://127.0.0.1:${server.address().port}`;
+process.env.WHIP_YOUTUBE_API_ORIGIN = `http://127.0.0.1:${server.address().port}`;
 const { checkFreeNow } = createRequire(import.meta.url)('../dev-server.cjs');
 after(() => server.close());
 
@@ -77,4 +93,17 @@ test('streams that can only play on YouTube are marked; bot-checked channels kee
   // An old previous result (over 45 minutes) is not carried forward.
   const old = await checkFreeNow(sources, { gapMs: 0, retryMs: 0, prev: { ...prev, updatedAt: new Date(Date.now() - 2 * 3600e3).toISOString() } });
   assert.equal(old.live.find((x) => x.sourceId === 'blind'), undefined);
+});
+
+test('with an API key, a bot-checked channel is checked through the YouTube Data API', async () => {
+  apiCalls.length = 0;
+  const r = await checkFreeNow([{ id: 'blind', name: 'Blind Co', kind: 'youtube', youtubeChannelId: 'UCblindblindblindblind01' }], { gapMs: 0, retryMs: 0, apiKey: 'test-key' });
+  assert.deepEqual(r.blocked, []);
+  assert.equal(r.live.length, 1);
+  assert.equal(r.live[0].videoId, 'APILIVE0001');
+  assert.equal(r.live[0].status, 'live');
+  assert.equal(r.live[0].title, 'Grambling State vs. Northern Illinois');
+  assert.ok(apiCalls[0].includes('playlistId=UUblindblindblindblind01'), 'reads the uploads playlist (cheap), not search');
+  assert.ok(apiCalls.every((u) => u.includes('key=test-key')));
+  assert.ok(!apiCalls.some((u) => u.includes('/search')));
 });

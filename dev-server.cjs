@@ -267,13 +267,46 @@ const ytCache = new Map(); // path -> { at, status, body }
 
 // ---------- Free, legal games: which official free channels are live right now ----------
 
+const YT_API = process.env.WHIP_YOUTUBE_API_ORIGIN || 'https://www.googleapis.com';
+
+/**
+ * YouTube Data API fallback for channels that bot-checked the page lookup. Costs about 2 quota
+ * units per channel (uploads playlist + one videos call), well within the free daily quota.
+ */
+async function apiLiveCheck(src, key) {
+  const get = async (path) => {
+    const r = await fetch(`${YT_API}/youtube/v3/${path}&key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(`YouTube API ${r.status}`);
+    return r.json();
+  };
+  const uploads = 'UU' + src.youtubeChannelId.slice(2);
+  const list = await get(`playlistItems?part=contentDetails&maxResults=15&playlistId=${uploads}`);
+  const ids = (list.items || []).map((i) => i.contentDetails?.videoId).filter(Boolean);
+  if (!ids.length) return null;
+  const vids = await get(`videos?part=snippet,liveStreamingDetails,status&id=${ids.join(',')}`);
+  const soon = Date.now() + 3 * 3600e3;
+  const pick =
+    (vids.items || []).find((v) => v.snippet?.liveBroadcastContent === 'live') ||
+    (vids.items || [])
+      .filter((v) => v.snippet?.liveBroadcastContent === 'upcoming' && new Date(v.liveStreamingDetails?.scheduledStartTime || 0).getTime() < soon)
+      .sort((a, b) => new Date(a.liveStreamingDetails.scheduledStartTime) - new Date(b.liveStreamingDetails.scheduledStartTime))[0];
+  if (!pick) return { none: true };
+  return {
+    videoId: pick.id,
+    title: pick.snippet?.title || '',
+    live: pick.snippet.liveBroadcastContent === 'live',
+    upcoming: pick.snippet.liveBroadcastContent === 'upcoming',
+    embeddable: pick.status?.embeddable !== false,
+  };
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Check each YouTube channel in the free-sources catalog and list the ones that are live or about
  * to start. Used by /api/free-now here and by scripts/free-now.mjs in the scheduled job.
  */
-async function checkFreeNow(sources, { gapMs = 1500, retryMs = 6000, prev = null, log = () => {} } = {}) {
+async function checkFreeNow(sources, { gapMs = 1500, retryMs = 6000, prev = null, apiKey = '', log = () => {} } = {}) {
   const live = [];
   const errors = [];
   const blocked = [];
@@ -295,6 +328,18 @@ async function checkFreeNow(sources, { gapMs = 1500, retryMs = 6000, prev = null
       if (info.blocked && !info.videoId) {
         await sleep(retryMs); // YouTube's bot check is per request; one retry often gets through
         info = await look(src);
+      }
+      if (info.blocked && !info.videoId && apiKey) {
+        try {
+          const viaApi = await apiLiveCheck(src, apiKey);
+          if (viaApi?.none) {
+            log(`${src.name}: not live (via YouTube API)`);
+            continue;
+          }
+          if (viaApi) info = { ...viaApi, blocked: false };
+        } catch (e) {
+          log(`${src.name}: YouTube API failed (${e.message})`);
+        }
       }
       if (info.blocked && !info.videoId) {
         blocked.push(src.id);

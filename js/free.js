@@ -49,8 +49,10 @@ export async function loadFreeNow() {
       // Ignore a stale file (the job stopped running): nothing in it can be trusted as live.
       const age = Date.now() - new Date(data.updatedAt || 0).getTime();
       if (!(age < 3 * 3600e3)) return { live: [], updatedAt: data.updatedAt || null, stale: true, from: url };
-      const blocked = data.checked > 0 && (data.errors || []).length >= data.checked;
-      return { live: data.live.filter((x) => /^[\w-]{11}$/.test(x.videoId || '')), updatedAt: data.updatedAt, stale: false, blocked, from: url };
+      const allFailed = data.checked > 0 && (data.errors || []).length >= data.checked;
+      // unseen: channels where YouTube showed the check a bot page, so their status is unknown
+      const unseen = Array.isArray(data.blocked) ? data.blocked : [];
+      return { live: data.live.filter((x) => /^[\w-]{11}$/.test(x.videoId || '')), updatedAt: data.updatedAt, stale: false, allFailed, unseen, from: url };
     }
   }
   return { live: [], updatedAt: null, stale: false, missing: true, from: null };

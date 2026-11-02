@@ -1000,6 +1000,8 @@ $('#filters').addEventListener('click', (e) => {
 gamesEl.addEventListener('click', (e) => {
   const watch = e.target.closest('[data-free-watch]');
   if (watch) return watchFree(watch.dataset.freeWatch);
+  const tryIt = e.target.closest('[data-free-try]');
+  if (tryIt) return tryFreeChannel(tryIt.dataset.freeTry);
   const row = e.target.closest('.game');
   if (!row) return;
   if (overlayPanel.matches) {
@@ -2114,6 +2116,23 @@ function watchFree(videoId) {
   }
 }
 
+/** Play whatever a free channel is streaming, via YouTube's channel player (no check needed). */
+function tryFreeChannel(sourceId) {
+  const s = freeCatalog.find((x) => x.id === sourceId);
+  if (!s) return;
+  const url = `https://www.youtube.com/channel/${s.youtubeChannelId}/live`;
+  let lib = library.find((x) => x.url === url);
+  if (!lib) {
+    lib = makeSource({ name: `${s.name} (live)`, url, group: 'Added links' });
+    setLibrary([...library, lib]);
+    persistLib();
+  }
+  const tile = defaultTileFor(null);
+  assign(tile, lib.id, null);
+  S.audio = tile;
+  refresh();
+}
+
 function freeSectionHtml() {
   if (DEMO || EMBED) return '';
   if (!freeNow.loaded) return `<section class="free-sec" aria-label="Free right now"><h3>${icon('tv')}Free right now</h3><p class="free-empty">Checking for free games…</p></section>`;
@@ -2137,11 +2156,25 @@ function freeSectionHtml() {
     })
     .join('');
   const checked = freeNow.updatedAt ? ` Checked ${secondsAgo(new Date(freeNow.updatedAt).getTime())}.` : '';
+  // Channels YouTube wouldn't let the check see: offer them, but don't auto-load (if nothing is
+  // live, YouTube's channel player only says "Video unavailable").
+  const unseen = (freeNow.unseen || [])
+    .map((id) => freeCatalog.find((s) => s.id === id))
+    .filter((s) => s && /^UC[\w-]{22}$/.test(s.youtubeChannelId || '') && !freeNow.live.some((x) => x.sourceId === s.id));
+  const unseenRows = unseen
+    .map(
+      (s) => `<div class="free-item">
+        <span class="fr-badge soon">Maybe</span>
+        <div class="fr-text"><b>${esc(s.name)}</b><span>${esc(s.whatStreamsFree || '')} · YouTube didn’t let the check see if it’s live</span></div>
+        <span class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn small" type="button" data-free-try="${esc(s.id)}">Try it</button><a class="btn small ghost" href="https://www.youtube.com/channel/${esc(s.youtubeChannelId)}/live" target="_blank" rel="noopener" title="Open on YouTube">${icon('external')}</a></span>
+      </div>`
+    )
+    .join('');
   const empty = freeNow.missing
     ? '<p class="free-empty">Live free games show up here once the free-games check has run. It runs every 15 minutes. The places below are always free.</p>'
     : freeNow.stale
     ? '<p class="free-empty">The free-games check hasn’t run recently, so live streams can’t be listed. The places below are always free.</p>'
-    : freeNow.blocked
+    : freeNow.allFailed
     ? '<p class="free-empty">The free-games check couldn’t reach YouTube this time. It tries again every 15 minutes. The places below are always free.</p>'
     : `<p class="free-empty">No official free streams are live right now.${esc(checked)} The places below are always free.</p>`;
   const web = freeCatalog.filter((s) => s.kind === 'web');
@@ -2153,7 +2186,7 @@ function freeSectionHtml() {
         )
         .join('')}</details>`
     : '';
-  return `<section class="free-sec" aria-label="Free right now"><h3>${icon('tv')}Free right now</h3>${rows || empty}${more}</section>`;
+  return `<section class="free-sec" aria-label="Free right now"><h3>${icon('tv')}Free right now</h3>${rows || (unseenRows ? '' : empty)}${unseenRows}${more}</section>`;
 }
 
 // ---------------------------------------------------------------------------
