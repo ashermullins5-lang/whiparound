@@ -1,0 +1,53 @@
+{
+ "updatedAt": "2026-11-14T11:58:52.341Z",
+ "live": [
+  {
+   "sourceId": "whl",
+   "source": "WHL",
+   "sports": [
+    "hockey"
+   ],
+   "videoId": "UYwUwikZ56o",
+   "title": "Wenatchee Wild @ Regina Pats — Saturday, Nov 14",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "pac12",
+   "source": "Pac-12",
+   "sports": [
+    "soccer",
+    "volleyball"
+   ],
+   "videoId": "Nt93dH3PLg0",
+   "title": "MEN'S BASKETBALL: Washington State vs. Northwest University | November 14, 2026",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "wtt",
+   "source": "World Table Tennis",
+   "sports": [
+    "table tennis"
+   ],
+   "videoId": "zuR-qqBCVpQ",
+   "title": "LIVE! | T1 | Day 3 | WTT Contender Istanbul 2026 | Singles SF & Mixed Doubles F",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "jleague",
+   "source": "J.LEAGUE International",
+   "sports": [
+    "soccer"
+   ],
+   "videoId": "R6_fhdZk0lA",
+   "title": "FC Machida Zelvia v Vissel Kobe - Live Match | 2026/27 Levain Cup | Quarter-Finals | Second Leg",
+   "status": "upcoming",
+   "embeddable": true
+  }
+ ],
+ "errors": [],
+ "blocked": [],
+ "checked": 10
+}
