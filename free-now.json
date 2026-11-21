@@ -1,0 +1,64 @@
+{
+ "updatedAt": "2026-11-21T19:14:40.975Z",
+ "live": [
+  {
+   "sourceId": "whl",
+   "source": "WHL",
+   "sports": [
+    "hockey"
+   ],
+   "videoId": "9nfhsY6yqNo",
+   "title": "Portland Winterhawks @ Moose Jaw Warriors — Saturday, Nov 21",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "flohockey",
+   "source": "FloHockey",
+   "sports": [
+    "hockey"
+   ],
+   "videoId": "AEU6g7RNwME",
+   "title": "LIVE: Chicago Wolves vs Toronto Marlies | November 21, 2026 | AHL | Hockey",
+   "status": "live",
+   "embeddable": true
+  },
+  {
+   "sourceId": "pac12",
+   "source": "Pac-12",
+   "sports": [
+    "soccer",
+    "volleyball"
+   ],
+   "videoId": "iTVL8FONuXk",
+   "title": "WOMEN'S BASKETBALL: Oregon State vs. Fairfield | November 21, 2026",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "wtt",
+   "source": "World Table Tennis",
+   "sports": [
+    "table tennis"
+   ],
+   "videoId": "op_1HBz6zYk",
+   "title": "LIVE! | T2 | Day 2 | ITTF World Youth Championships Istanbul 2026 | Session 1 (Teams Event QF)",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "gtworld",
+   "source": "GT World",
+   "sports": [
+    "motorsport"
+   ],
+   "videoId": "Xq5Z9rxcLJc",
+   "title": "LIVE | Greater Bay Area GT Cup, Macau | Race | SRO GT Cup 2026",
+   "status": "upcoming",
+   "embeddable": true
+  }
+ ],
+ "errors": [],
+ "blocked": [],
+ "checked": 10
+}
