@@ -1,0 +1,75 @@
+{
+ "updatedAt": "2026-11-28T21:25:51.961Z",
+ "live": [
+  {
+   "sourceId": "whl",
+   "source": "WHL",
+   "sports": [
+    "hockey"
+   ],
+   "videoId": "2XndHHkcTE4",
+   "title": "Brandon Wheat Kings @ Edmonton Oil Kings — Saturday, Nov 28",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "flohockey",
+   "source": "FloHockey",
+   "sports": [
+    "hockey"
+   ],
+   "videoId": "6URqEImixIE",
+   "title": "LIVE HOCKEY: Kitchener Rangers vs London Knights | FloHockey on YouTube | OHL Game Of The Week",
+   "status": "live",
+   "embeddable": true
+  },
+  {
+   "sourceId": "pac12",
+   "source": "Pac-12",
+   "sports": [
+    "soccer",
+    "volleyball"
+   ],
+   "videoId": "97dkVegtP40",
+   "title": "WOMEN'S BASKETBALL: Texas State vs. UTEP | November 28, 2026",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "nzc",
+   "source": "New Zealand Cricket",
+   "sports": [
+    "cricket"
+   ],
+   "videoId": "_V7Xum-Jr48",
+   "title": "DAY 3 LIVE 🔴 Otago v Wellington Firebirds - Plunket Shield",
+   "status": "live",
+   "embeddable": true
+  },
+  {
+   "sourceId": "jleague",
+   "source": "J.LEAGUE International",
+   "sports": [
+    "soccer"
+   ],
+   "videoId": "ILEwGJPM2gk",
+   "title": "FC Machida Zelvia v Tokyo Verdy - Live Match | J.League",
+   "status": "upcoming",
+   "embeddable": true
+  },
+  {
+   "sourceId": "gtworld",
+   "source": "GT World",
+   "sports": [
+    "motorsport"
+   ],
+   "videoId": "3F2TfFvpPY8",
+   "title": "LIVE | Race 2 | bp Adelaide Grand Final | 2026 GT World Challenge Australia powered by AWS",
+   "status": "upcoming",
+   "embeddable": true
+  }
+ ],
+ "errors": [],
+ "blocked": [],
+ "checked": 10
+}
